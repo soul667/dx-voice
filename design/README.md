@@ -48,7 +48,7 @@ Motion target: 120–160 ms surface appearance, 80–120 ms amplitude smoothing,
 
 ## Implementation boundary
 
-The current GTK runtime still uses the earlier prototype `VoiceOverlay`. This library is the source for the next UI implementation. `VoicePill`, `TranscriptCard` and settings controls have not yet been ported to GTK. The real audio waveform and streaming engine already work in the prototype.
+The v0.2 GTK runtime implements `VoicePill`, `TranscriptCard`, `Waveform`, `Keycap` and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing Ctrl finalizes and inserts text. Settings `TextField` and `Toggle` remain design-library components awaiting a separate settings-screen implementation.
 
 Figma Code Connect does not provide a GTK/Python target, so no Code Connect integration is claimed. The documented component map is the handoff until the production UI is implemented.
 

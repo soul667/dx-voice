@@ -23,7 +23,7 @@ SOCKET = RUNTIME / 'dx-voice.sock'
 DEFAULT = dict(base_url='https://api.openai.com/v1', model='gpt-transcribe',
                api_key='', prompt='中文简体与 English 混合口述。保留技术术语。',
                source='', max_seconds=300, proxy_url='',
-               realtime_model='gpt-live-transcribe', realtime_delay='low')
+               realtime_model='gpt-live-transcribe', realtime_delay='low', theme='light')
 
 
 def private_dir(path):
@@ -57,7 +57,8 @@ def save_config(data):
                            ('prompt', '中文 / 英文及专业术语提示'), ('source', '麦克风源：留空使用系统默认'),
                            ('max_seconds', '单次最长秒数，最多 600 秒'),
                            ('proxy_url', '网络代理地址；留空使用进程环境代理'),
-                           ('realtime_model', '实时语音识别模型'), ('realtime_delay', '实时延迟：minimal 最快，low 兼顾准确率')]:
+                           ('realtime_model', '实时语音识别模型'), ('realtime_delay', '实时延迟：minimal 最快，low 兼顾准确率'),
+                           ('theme', '界面主题：light / dark / auto')]:
             value = str(data.get(key, DEFAULT[key])).replace('\n', ' ').replace('\r', ' ')
             out.write(f'# {title}\n{key}={value}\n\n')
     os.replace(name, CONFIG)
@@ -170,7 +171,9 @@ class App:
         from gi.repository import Gtk, GLib
         self.Gtk, self.GLib = Gtk, GLib
         from .overlay import VoiceOverlay
-        self.overlay = VoiceOverlay()
+        self.overlay = VoiceOverlay(theme=config().get('theme', 'light'),
+                                    on_cancel=lambda: self.command('cancel'),
+                                    on_retry=lambda: self.command('retry'))
         global STATUS_UI
         STATUS_UI = self.show_status
         self.phase = 'idle'
@@ -236,8 +239,8 @@ class App:
         return True
 
     def show_status(self, message):
-        phase = 'success' if message.startswith('✓') else 'cancelled' if '已取消' in message else 'error'
-        self.overlay.show(phase, message)
+        phase = 'success' if message.startswith('✓') else 'cancelled' if '已取消' in message else 'info' if '已保存' in message else 'error'
+        self.overlay.show(phase, message, partial='' if phase == 'info' else None)
 
     def receive(self, *_):
         cmd = self.sock.recv(100).decode('utf-8', errors='replace')
@@ -255,6 +258,8 @@ class App:
             subprocess.Popen(['xdg-open', str(CONFIG)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         elif cmd == 'gui-settings':
             self.settings()
+        elif cmd == 'preview' and self.phase == 'idle':
+            self.overlay.show('info', '长按 Ctrl 开始说话', partial='')
         elif cmd == 'toggle':
             if self.phase == 'recording':
                 self.finish()
@@ -284,6 +289,7 @@ class App:
             notify('请先在设置中填写 API Key。')
             self.command('settings')
             return
+        self.overlay.set_theme(cfg.get('theme', 'light'))
         self.target = active_window()
         self.token = uuid.uuid4().hex
         token = self.token
@@ -407,8 +413,9 @@ class App:
         print('transcription=' + ('failed' if error else 'succeeded'), flush=True)
         self.phase = 'idle'
         if error:
-            notify(error + ' 录音已保留，可从托盘菜单重试。')
+            notify(error if '录音已保留' in error else error + ' 录音已保留，可从托盘菜单重试。')
             return False
+        self.overlay.partial = text
         # Persist latest result only; do not log speech or API credentials.
         latest = STATE / 'last-transcript.txt'
         fd = os.open(latest, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -470,5 +477,6 @@ class App:
         finally:
             self.stop_recorder(cancel=True)
             self.realtime.close()
+            self.overlay.close()
             SOCKET.unlink(missing_ok=True)
 

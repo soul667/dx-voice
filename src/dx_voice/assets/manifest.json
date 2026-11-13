@@ -1,0 +1,58 @@
+{
+  "close-light.svg": {
+    "sha256": "32dbe2bae58c56c475710cd1d2fcc879751f5c2a6a918721f8ce651181698ace",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-accent-light.svg": {
+    "sha256": "d7caa83efcf320f9e0a9cb0bcb780bf7cd8e8a43a456628a7130b619e214f3d9",
+    "source": "Figma DX Voice design export"
+  },
+  "mic-light.svg": {
+    "sha256": "67432ca859c2a73c3cfd931a6e790c4ca7397962b11842a3d883e7448fda8874",
+    "source": "Figma DX Voice design export"
+  },
+  "check-light.svg": {
+    "sha256": "f69e4db933233d082d6f986ff810916d381968c8f2d297b20bacf99684b4c111",
+    "source": "Figma DX Voice design export"
+  },
+  "retry-light.svg": {
+    "sha256": "8fb2668ee1132b974b471cf6f22b6e180f9543341b177117fda22075df106f0b",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-error-light.svg": {
+    "sha256": "16e20199fa460afc4b92cdf8ee61ff19efd9fa43b0d25385cbb50000f1d6d3be",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-success-light.svg": {
+    "sha256": "d2fc443b62f45147d76af1bc9b80090e66e092b644ba547be72835a2b5b2c121",
+    "source": "Figma DX Voice design export"
+  },
+  "close-dark.svg": {
+    "sha256": "dbea4bab172de971564359125f8331f7ff81d633458951763065d5594926dc14",
+    "source": "Figma DX Voice design export"
+  },
+  "mic-dark.svg": {
+    "sha256": "8280cf6563fd5d07f9708f2fdc33faede66807e5b15d8a5c58f7a63f41636f39",
+    "source": "Figma DX Voice design export"
+  },
+  "check-dark.svg": {
+    "sha256": "8fb41cb8070d6f5bcbe96a2c412fa484182e5fd42326a651afef7dcb227bb4a2",
+    "source": "Figma DX Voice design export"
+  },
+  "retry-dark.svg": {
+    "sha256": "0eb1f900abe6fb8760e465730d814b3ff4dd876f6ca04bf72f3a0c5e57d975ab",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-accent-dark.svg": {
+    "sha256": "b531433239f62af39b47a1fa1ab695e78032e23506e392c8b5fa14c1bc381341",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-success-dark.svg": {
+    "sha256": "d054eb4641e9b723283cc8b5635811fd829b60842b2b09fbd6d463d76ac58ed9",
+    "source": "Figma DX Voice design export"
+  },
+  "dot-error-dark.svg": {
+    "sha256": "7e0345ec53716f3694e9f53262118c59edd402da53264828b947542393fc11d3",
+    "source": "Figma DX Voice design export"
+  }
+}

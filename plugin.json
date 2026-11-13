@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "voice",
   "name": "DX Voice",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Streaming voice input for Linux: hold Ctrl, speak, release. Standalone app and dx voice CLI.",
   "author": "DX Voice contributors",
   "source": "https://github.com/soul667/dx-voice",

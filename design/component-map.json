@@ -2,7 +2,7 @@
   "file": "https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k",
   "reviewNode": "8:2",
   "coverNode": "10:2",
-  "status": "Design v0.1; GTK prototype not yet migrated",
+  "status": "Figma v0.1 voice overlay implemented in GTK runtime v0.2.0",
   "families": {
     "Keycap": {
       "id": "5:28",
@@ -260,6 +260,17 @@
       "TextField": "API settings",
       "Toggle": "settings switches"
     },
-    "codeConnect": "Not configured: GTK/Python is not a supported Code Connect target. Mapping is documented here; no fake code binding is claimed."
+    "codeConnect": "Not configured: GTK/Python is not a supported Code Connect target. Mapping is documented here; no fake code binding is claimed.",
+    "implementedComponents": [
+      "VoicePill",
+      "TranscriptCard",
+      "Waveform",
+      "Keycap",
+      "IconButton (cancel/retry actions)"
+    ],
+    "pendingComponents": [
+      "TextField",
+      "Toggle"
+    ]
   }
 }

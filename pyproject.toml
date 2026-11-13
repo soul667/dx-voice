@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dx-voice"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hold Ctrl, speak, release: streaming voice input for Linux and Dex"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = "MIT"
 authors = [{name = "DX Voice contributors"}]
-dependencies = ["requests>=2.31,<3", "websockets>=16,<17", "python-xlib>=0.33,<1"]
+dependencies = ["requests>=2.31,<3", "websockets>=16,<17", "python-xlib>=0.33,<1", "Pillow>=10,<13"]
 classifiers = ["Development Status :: 3 - Alpha", "Operating System :: POSIX :: Linux", "Topic :: Multimedia :: Sound/Audio :: Speech"]
 
 [project.urls]
@@ -22,3 +22,6 @@ dx-voice = "dx_voice.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dx_voice = ["assets/*.svg", "assets/*.json"]

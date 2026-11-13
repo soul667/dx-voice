@@ -26,8 +26,9 @@ def quote(value):
 
 def status():
     from . import app
+    from . import __version__
     cfg = app.config()
-    return {'service_active': active(SERVICE), 'socket_present': app.SOCKET.is_socket(),
+    return {'version': __version__, 'ui': 'figma-v1', 'service_active': active(SERVICE), 'socket_present': app.SOCKET.is_socket(),
             'key_configured': bool(cfg.get('api_key', '').strip()),
             'legacy_service_active': active(LEGACY), 'config_file': str(app.CONFIG)}
 
@@ -38,7 +39,13 @@ def doctor():
     result['session'] = os.environ.get('XDG_SESSION_TYPE', 'unknown')
     result['display_present'] = bool(os.environ.get('DISPLAY'))
     result['modules'] = {name: importlib.util.find_spec(name) is not None
-                         for name in ('gi', 'cairo', 'requests', 'websockets', 'Xlib')}
+                         for name in ('gi', 'cairo', 'requests', 'websockets', 'Xlib', 'PIL')}
+    try:
+        import gi
+        gi.require_version('Rsvg', '2.0')
+        result['modules']['Rsvg'] = True
+    except (ImportError, ValueError):
+        result['modules']['Rsvg'] = False
     result['tools'] = {name: bool(shutil.which(name))
                        for name in ('parec', 'xdotool', 'xclip', 'xprop', 'systemctl', 'xdg-open')}
     result['runtime_ready'] = (result['python_supported'] and result['display_present']
@@ -114,7 +121,7 @@ Categories=Utility;Accessibility;
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='dx-voice', description='Streaming voice input for Linux and Dex')
     sub = parser.add_subparsers(dest='action', required=True)
-    for action in ('status', 'doctor', 'start', 'stop', 'run', 'toggle', 'cancel', 'retry'):
+    for action in ('status', 'doctor', 'start', 'stop', 'run', 'toggle', 'cancel', 'retry', 'preview'):
         sub.add_parser(action)
     settings = sub.add_parser('settings')
     settings.add_argument('--gui', action='store_true')

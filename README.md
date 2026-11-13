@@ -4,7 +4,7 @@
 
 DX Voice streams microphone PCM to a realtime transcription API, previews words as they arrive, and pastes the final text into the window where dictation started. It does not press Enter or send your message.
 
-> Alpha. The working GTK interface is a prototype. The new [Figma component library](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k) is the design source for the next UI; it has not yet been implemented in GTK.
+> Alpha v0.2. The running GTK overlay now implements the [Figma component library](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k): a 352 × 56 voice pill and a 400 × 196 live transcript card, with light/dark tokens and the original exported SVG assets. Settings controls remain native GTK.
 
 ## Design
 
@@ -25,7 +25,7 @@ Install system dependencies on Ubuntu:
 
 ```bash
 sudo apt install python3-venv python3-gi python3-cairo gir1.2-gtk-3.0 \
-  gir1.2-pango-1.0 pulseaudio-utils xdotool xclip x11-utils
+  gir1.2-pango-1.0 gir1.2-rsvg-2.0 pulseaudio-utils xdotool xclip x11-utils
 # Optional tray icon:
 sudo apt install gir1.2-ayatanaappindicator3-0.1
 ```
@@ -69,6 +69,9 @@ The parent Dex repository includes this project at `plugins/voice` as an indepen
 
 ## Dictation
 
+The default theme is the light Figma design. Set `theme=dark` or `theme=auto` in the private settings to change it. Install the Inter and Noto Sans SC fonts for the reference typography; the current development machine has both.
+
+
 Focus your input field, hold either Ctrl for about 0.4 seconds, then speak. Release Ctrl to finalize and insert the text. A tap or a normal Ctrl+C/V shortcut does not start dictation. Pressing another key during recording cancels that recording.
 
 The waveform is driven by actual microphone audio. Interim words are previews; only the final transcript is inserted. If the active window changes, the result is copied to the clipboard rather than pasted into a different window. The clipboard's current content is replaced.
@@ -85,6 +88,7 @@ See [settings.example.txt](settings.example.txt). Important fields:
 | `base_url` | OpenAI-compatible base URL, including `/v1` |
 | `realtime_model` | Defaults to `gpt-live-transcribe` |
 | `realtime_delay` | `low` balances accuracy and delay; `minimal` prioritizes speed |
+| `theme` | `light` (default), `dark`, or `auto` |
 | `source` | PulseAudio microphone name; empty uses the system default |
 | `proxy_url` | Optional proxy for the user service, e.g. `http://127.0.0.1:7890` |
 | `max_seconds` | Default 300 seconds, capped at 600 |
