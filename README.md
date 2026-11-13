@@ -63,7 +63,7 @@ dx voice start
 dx voice status
 ```
 
-Run setup from the package virtualenv once to record its interpreter. Alternatively, set `DX_VOICE_PYTHON` to the Python executable with GTK and the required packages installed. `dx voice` delegates to the same `dx_voice.cli` implementation as `dx-voice`.
+Run setup from the package virtualenv once to record its interpreter. Alternatively, set `DX_VOICE_PYTHON` to the Python executable with GTK and the required packages installed. `dx voice` delegates to the same `dx_voice.cli` implementation as `dx-voice`. The lightweight Dex adapter can load under a newer host Python; the audio process still requires Python 3.10–3.12.
 
 The parent Dex repository includes this project at `plugins/voice` as an independent Git submodule. Use `git submodule update --init plugins/voice` when working from a Dex checkout, then `dx plugin install builtin:voice --enable`.
 

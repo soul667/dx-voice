@@ -7,9 +7,26 @@
   "author": "DX Voice contributors",
   "source": "https://github.com/soul667/dx-voice",
   "license": "MIT",
-  "requires": {"remote_helper": ">=1.3,<2", "python": ">=3.10,<3.13"},
-  "entrypoints": {"cli": {"module": "dex_plugin.py", "function": "register_cli"}},
+  "requires": {
+    "remote_helper": ">=1.3,<2",
+    "python": ">=3.10"
+  },
+  "entrypoints": {
+    "cli": {
+      "module": "dex_plugin.py",
+      "function": "register_cli"
+    }
+  },
   "dependencies": {},
-  "permissions": ["local.process", "local.files.read", "local.files.write", "network", "secrets", "x-microphone", "x-key-state", "x-clipboard"],
+  "permissions": [
+    "local.process",
+    "local.files.read",
+    "local.files.write",
+    "network",
+    "secrets",
+    "x-microphone",
+    "x-key-state",
+    "x-clipboard"
+  ],
   "commands": []
 }
