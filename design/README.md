@@ -37,12 +37,12 @@ Main text contrast against panels is at least 5.25:1 in the reviewed roles. Ligh
 
 ## Interaction and motion
 
-1. **Idle → Listening:** hold Ctrl alone for roughly 400 ms. Do not take focus from the current input field.
+1. **Idle → Listening:** hold Ctrl alone for roughly 1200 ms. Do not take focus from the current input field.
 2. **Listening:** open microphone only for the active turn. Drive waveform amplitude from actual PCM, and display real incremental transcripts. No decorative loop may masquerade as audio feedback.
 3. **Listening → Finishing:** release Ctrl, drain captured tail frames, then commit the live audio turn. Preserve the preview while awaiting final text.
 4. **Finishing → Success:** paste the final result once; never press Enter. If the active window changed, copy instead and use a copied-result message.
 5. **Error:** retain the recording locally. Retry must be explicit, since it uploads audio again.
-6. **Cancel:** another key during a Ctrl-held turn cancels; do not insert stale partial results.
+6. **Cancel:** another key or mouse action during a Ctrl-held turn cancels; do not insert stale partial results.
 
 Motion target: 120–160 ms surface appearance, 80–120 ms amplitude smoothing, and a short confirmation followed by fade. Reduced-motion mode should keep state changes and replace nonessential movement with static feedback. These are design specs; native Figma state variants do not simulate the speech API.
 

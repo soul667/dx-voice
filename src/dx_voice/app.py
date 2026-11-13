@@ -23,7 +23,7 @@ SOCKET = RUNTIME / 'dx-voice.sock'
 DEFAULT = dict(base_url='https://api.openai.com/v1', model='gpt-transcribe',
                api_key='', prompt='中文简体与 English 混合口述。保留技术术语。',
                source='', max_seconds=300, proxy_url='',
-               realtime_model='gpt-live-transcribe', realtime_delay='low', theme='light')
+               realtime_model='gpt-live-transcribe', realtime_delay='low', theme='light', ctrl_hold_ms=1200)
 
 
 def private_dir(path):
@@ -58,7 +58,8 @@ def save_config(data):
                            ('max_seconds', '单次最长秒数，最多 600 秒'),
                            ('proxy_url', '网络代理地址；留空使用进程环境代理'),
                            ('realtime_model', '实时语音识别模型'), ('realtime_delay', '实时延迟：minimal 最快，low 兼顾准确率'),
-                           ('theme', '界面主题：light / dark / auto')]:
+                           ('theme', '界面主题：light / dark / auto'),
+                           ('ctrl_hold_ms', 'Ctrl 单独长按触发时长，毫秒，默认 1200')]:
             value = str(data.get(key, DEFAULT[key])).replace('\n', ' ').replace('\r', ' ')
             out.write(f'# {title}\n{key}={value}\n\n')
     os.replace(name, CONFIG)
@@ -135,8 +136,9 @@ def paste(text, target):
 
 
 class CtrlHold:
-    """Hold Ctrl alone for 400ms; release commits, other keys suppress it."""
-    def __init__(self):
+    """Hold Ctrl alone; mouse actions and key chords take precedence."""
+    def __init__(self, threshold=1.2):
+        self.threshold = threshold
         self.since = None
         self.active = False
         self.suppressed = False
@@ -146,22 +148,53 @@ class CtrlHold:
         self.suppressed = True
 
     def update(self, ctrl, other, now):
+        if other:
+            action = 'cancel' if self.active else None
+            if ctrl:
+                self.block()
+            else:
+                self.since, self.active, self.suppressed = None, False, False
+            return action
         if not ctrl:
             action = 'finish' if self.active else None
             self.since, self.active, self.suppressed = None, False, False
-            return action
-        if other:
-            action = 'cancel' if self.active else None
-            self.block()
             return action
         if self.suppressed or self.active:
             return None
         if self.since is None:
             self.since = now
-        if now - self.since >= 0.4:
+        if now - self.since >= self.threshold:
             self.active = True
             return 'start'
         return None
+
+
+class PointerWatch:
+    """Passive XI2 mouse-button observer; wheel presses survive the polling interval."""
+    def __init__(self, connection):
+        from Xlib.ext import xinput
+        self.connection = connection
+        self.root = connection.screen().root
+        self.raw_button_press = xinput.RawButtonPress
+        self.root.xinput_select_events([(xinput.AllMasterDevices, xinput.RawButtonPressMask)])
+        connection.sync()
+
+    def activity(self):
+        from Xlib import X
+        pressed = False
+        while self.connection.pending_events():
+            event = self.connection.next_event()
+            if getattr(event, 'evtype', None) == self.raw_button_press:
+                pressed = True
+        mask = X.Button1Mask | X.Button2Mask | X.Button3Mask | X.Button4Mask | X.Button5Mask
+        return pressed or bool(self.root.query_pointer().mask & mask)
+
+
+def hold_threshold(cfg):
+    try:
+        return max(.6, min(5, float(cfg.get('ctrl_hold_ms', 1200)) / 1000))
+    except (TypeError, ValueError):
+        return 1.2
 
 
 class App:
@@ -200,7 +233,8 @@ class App:
         self.keyboard = display.Display()
         self.ctrl_codes = {self.keyboard.keysym_to_keycode(XK.string_to_keysym(k))
                            for k in ('Control_L', 'Control_R')}
-        self.ctrl_hold = CtrlHold()
+        self.pointer_watch = PointerWatch(self.keyboard)
+        self.ctrl_hold = CtrlHold(hold_threshold(config()))
         GLib.timeout_add(25, self.poll_ctrl)
         from .realtime import Realtime
         self.realtime = Realtime(lambda kind, token, data: GLib.idle_add(self._network_event, kind, token, data))
@@ -223,8 +257,11 @@ class App:
     def poll_ctrl(self):
         state = self.keyboard.query_keymap()
         pressed = {k for k in range(8, 256) if state[k // 8] & (1 << (k % 8))}
-        action = self.ctrl_hold.update(bool(pressed & self.ctrl_codes),
-                                       bool(pressed - self.ctrl_codes), time.monotonic())
+        ctrl = bool(pressed & self.ctrl_codes)
+        other = bool(pressed - self.ctrl_codes) or self.pointer_watch.activity()
+        if ctrl and not other and self.ctrl_hold.since is None and not self.ctrl_hold.suppressed:
+            self.ctrl_hold.threshold = hold_threshold(config())
+        action = self.ctrl_hold.update(ctrl, other, time.monotonic())
         if action == 'start':
             if self.phase == 'idle':
                 print('ctrl_hold=start', flush=True)

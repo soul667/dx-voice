@@ -5,6 +5,7 @@ base_url=https://api.openai.com/v1
 realtime_model=gpt-live-transcribe
 realtime_delay=low
 theme=light
+ctrl_hold_ms=1200
 prompt=中文简体与 English 混合口述。保留技术术语。
 source=
 max_seconds=300

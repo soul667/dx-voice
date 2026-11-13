@@ -72,7 +72,7 @@ The parent Dex repository includes this project at `plugins/voice` as an indepen
 The default theme is the light Figma design. Set `theme=dark` or `theme=auto` in the private settings to change it. Install the Inter and Noto Sans SC fonts for the reference typography; the current development machine has both.
 
 
-Focus your input field, hold either Ctrl for about 0.4 seconds, then speak. Release Ctrl to finalize and insert the text. A tap or a normal Ctrl+C/V shortcut does not start dictation. Pressing another key during recording cancels that recording.
+Focus your input field, hold either Ctrl for about 1.2 seconds, then speak. Release Ctrl to finalize and insert the text. A tap or a normal Ctrl+C/V shortcut does not start dictation. Ctrl+mouse actions, including wheel zoom and dragging, suppress dictation until Ctrl is released. They are passively observed and are not grabbed or consumed. Pressing another key or using a mouse button/wheel during recording cancels that recording.
 
 The waveform is driven by actual microphone audio. Interim words are previews; only the final transcript is inserted. If the active window changes, the result is copied to the clipboard rather than pasted into a different window. The clipboard's current content is replaced.
 
@@ -88,6 +88,7 @@ See [settings.example.txt](settings.example.txt). Important fields:
 | `base_url` | OpenAI-compatible base URL, including `/v1` |
 | `realtime_model` | Defaults to `gpt-live-transcribe` |
 | `realtime_delay` | `low` balances accuracy and delay; `minimal` prioritizes speed |
+| `ctrl_hold_ms` | Hold Ctrl alone for this many milliseconds; defaults to 1200 |
 | `theme` | `light` (default), `dark`, or `auto` |
 | `source` | PulseAudio microphone name; empty uses the system default |
 | `proxy_url` | Optional proxy for the user service, e.g. `http://127.0.0.1:7890` |

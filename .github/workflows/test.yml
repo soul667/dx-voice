@@ -24,5 +24,6 @@ jobs:
           sudo apt-get install -y python3-venv python3-gi python3-cairo gir1.2-gtk-3.0 gir1.2-rsvg-2.0 xvfb fonts-inter fonts-noto-cjk
       - run: |
           python3 -m venv --system-site-packages .venv
+          .venv/bin/python -m pip install --upgrade pip setuptools wheel
           .venv/bin/pip install -e .
       - run: xvfb-run -a .venv/bin/python -m unittest discover -s tests -v

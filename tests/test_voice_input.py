@@ -4,7 +4,8 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import patch, Mock
 from dx_voice import app as voice
 
 
@@ -111,8 +112,10 @@ class Tests(unittest.TestCase):
         hold = voice.CtrlHold()
         self.assertIsNone(hold.update(True, False, 0))
         self.assertIsNone(hold.update(True, False, .2))
-        self.assertEqual(hold.update(True, False, .41), 'start')
-        self.assertIsNone(hold.update(True, False, 1))
+        self.assertIsNone(hold.update(True, False, .41))
+        self.assertIsNone(hold.update(True, False, 1.19))
+        self.assertEqual(hold.update(True, False, 1.21), 'start')
+        self.assertIsNone(hold.update(True, False, 1.5))
         self.assertEqual(hold.update(False, False, 2), 'finish')
 
     def test_ctrl_shortcut_and_quick_tap_do_not_record(self):
@@ -126,9 +129,39 @@ class Tests(unittest.TestCase):
     def test_other_key_cancels_active_ctrl_recording(self):
         hold = voice.CtrlHold()
         hold.update(True, False, 0)
-        self.assertEqual(hold.update(True, False, .5), 'start')
-        self.assertEqual(hold.update(True, True, 1), 'cancel')
+        self.assertEqual(hold.update(True, False, 1.3), 'start')
+        self.assertEqual(hold.update(True, True, 1.4), 'cancel')
         self.assertIsNone(hold.update(False, False, 2))
+
+    def test_ctrl_wheel_blocks_recording_until_ctrl_is_released(self):
+        hold = voice.CtrlHold()
+        hold.update(True, False, 0)
+        self.assertIsNone(hold.update(True, True, .3))
+        self.assertIsNone(hold.update(True, False, 3))
+        self.assertIsNone(hold.update(False, False, 4))
+        self.assertIsNone(hold.update(True, False, 5))
+        self.assertEqual(hold.update(True, False, 6.3), 'start')
+
+    def test_wheel_at_release_cancels_instead_of_committing(self):
+        hold = voice.CtrlHold()
+        hold.update(True, False, 0)
+        hold.update(True, False, 1.3)
+        self.assertEqual(hold.update(False, True, 1.4), 'cancel')
+        self.assertIsNone(hold.update(False, False, 1.5))
+
+    def test_transient_wheel_event_is_detected_without_a_held_button(self):
+        watcher = voice.PointerWatch.__new__(voice.PointerWatch)
+        watcher.raw_button_press = 15
+        watcher.connection = Mock()
+        watcher.connection.pending_events.side_effect = [1, 0]
+        watcher.connection.next_event.return_value = SimpleNamespace(evtype=15)
+        watcher.root = Mock()
+        watcher.root.query_pointer.return_value = SimpleNamespace(mask=0)
+        self.assertTrue(watcher.activity())
+
+    def test_hold_duration_is_configurable_and_invalid_value_is_safe(self):
+        self.assertEqual(voice.hold_threshold({'ctrl_hold_ms': '1800'}), 1.8)
+        self.assertEqual(voice.hold_threshold({'ctrl_hold_ms': 'invalid'}), 1.2)
 
 
 if __name__ == '__main__':

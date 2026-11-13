@@ -151,11 +151,16 @@ class VoiceOverlay:
         if native:
             region = cairo.Region()
             pill_y = self.MARGIN + (self.CARD[1] + self.GAP if self.expanded else 0)
-            region.union(cairo.RectangleInt((self.WIDTH - self.PILL[0]) // 2,
-                                                       pill_y, *self.PILL))
-            if self.expanded:
-                region.union(cairo.RectangleInt((self.WIDTH - self.CARD[0]) // 2,
-                                                           self.MARGIN, *self.CARD))
+            pill_x = (self.WIDTH - self.PILL[0]) // 2
+            # Only action buttons receive pointer events. The rest of the HUD
+            # is click/scroll-through, including when it overlaps an input field.
+            if self.phase == 'recording':
+                region.union(cairo.RectangleInt(pill_x + 12, pill_y + 12, 32, 32))
+            elif self.phase == 'error':
+                region.union(cairo.RectangleInt(pill_x + 304, pill_y + 8, 40, 40))
+                if self.expanded:
+                    region.union(cairo.RectangleInt((self.WIDTH - self.CARD[0]) // 2 + 324,
+                                                      self.MARGIN + 144, 60, 36))
             native.input_shape_combine_region(region, 0, 0)
 
     def show(self, phase, message='', partial=None):
