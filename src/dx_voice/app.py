@@ -56,7 +56,7 @@ def save_config(data):
     with os.fdopen(fd, 'w', encoding='utf-8') as out:
         out.write('# 语音输入法设置：填在等号右边，不要加引号。保存后下次录音自动生效。\n'
                   '# API Key 只填在本机；录音会发送到下方 API 地址。\n'
-                  '# 操作：长按 Win 语音输入；长按 Ctrl+Win 生成纯命令；松开完成。\n\n')
+                  '# 操作：长按 Ctrl 语音输入；长按 Ctrl+Win 生成纯命令；松开完成。\n\n')
         for key, title in [('api_key', '你的 OpenAI API Key'), ('base_url', 'API 基础地址，含 /v1；可填兼容中转地址'),
                            ('model', '语音模型；中转不支持默认模型时，填服务商支持的语音模型名'),
                            ('prompt', '中文 / 英文及专业术语提示'), ('source', '麦克风源：留空使用系统默认'),
@@ -282,14 +282,14 @@ class App:
         self.asr_backend = load_backend(self.asr_name)
         self.realtime = self.asr_backend.create_realtime(lambda kind, token, data: GLib.idle_add(self._network_event, kind, token, data))
         self.realtime.prepare(self.asr_backend.settings(config()))
-        self.super_binding.acquire()
+        # Win alone stays available to GNOME.
         try:
             gi.require_version('AyatanaAppIndicator3', '0.1')
             from gi.repository import AyatanaAppIndicator3 as Indicator
             self.indicator = Indicator.Indicator.new('dx-voice', 'audio-input-microphone', Indicator.IndicatorCategory.APPLICATION_STATUS)
             self.indicator.set_status(Indicator.IndicatorStatus.ACTIVE)
             menu = Gtk.Menu()
-            for title, command in [('开始 / 结束录音（长按 Win）', 'toggle'), ('重试上次失败录音', 'retry'), ('取消录音', 'cancel'), ('设置与历史（dx v）', 'settings')]:
+            for title, command in [('开始 / 结束录音（长按 Ctrl）', 'toggle'), ('重试上次失败录音', 'retry'), ('取消录音', 'cancel'), ('设置与历史（dx v）', 'settings')]:
                 item = Gtk.MenuItem(label=title)
                 item.connect('activate', lambda _, cmd=command: GLib.timeout_add(300, self.command, cmd))
                 menu.append(item)
@@ -301,10 +301,13 @@ class App:
     def poll_hotkey(self):
         state = self.keyboard.query_keymap()
         pressed = {k for k in range(8, 256) if state[k // 8] & (1 << (k % 8))}
-        ctrl = bool(pressed & self.super_codes)
-        command = bool(pressed & self.ctrl_codes)
-        tools = bool(pressed & self.alt_codes)
-        other = (command and tools) or bool(pressed - (self.super_codes | self.ctrl_codes | self.alt_codes)) or self.pointer_watch.activity()
+        control = bool(pressed & self.ctrl_codes)
+        super_key = bool(pressed & self.super_codes)
+        alt = bool(pressed & self.alt_codes)
+        tools = super_key and alt and not control
+        command = control and super_key and not alt
+        ctrl = control or tools
+        other = (control and alt) or bool(pressed - (self.super_codes | self.ctrl_codes | self.alt_codes)) or self.pointer_watch.activity()
         if ctrl and not other and self.hold.since is None and not self.hold.suppressed:
             self.hold.threshold = hold_threshold(config())
         action = self.hold.update(ctrl, other, time.monotonic(), command=command, tools=tools)
@@ -344,7 +347,7 @@ class App:
             from .tui import launch
             launch(in_terminal=True)
         elif cmd == 'preview' and self.phase == 'idle':
-            self.overlay.show('info', '长按 Win 开始说话', partial='')
+            self.overlay.show('info', '长按 Ctrl 开始说话', partial='')
         elif cmd == 'toggle':
             if self.phase == 'recording':
                 self.finish()

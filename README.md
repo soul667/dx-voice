@@ -1,6 +1,6 @@
 # DX Voice
 
-**Win → dictate. Ctrl+Win → a shell command. `dx v` → settings and history.**
+**Ctrl → dictate. Ctrl+Win → a shell command. `dx v` → settings and history.**
 
 Streaming voice input for Linux, standalone or as a [Dex](https://github.com/soul667/Dex) plugin. The terminal workspace is assembled from [Textual](https://textual.textualize.io/) widgets and the existing DX theme engine. Models are called through the official OpenAI SDK; local records use SQLite.
 
@@ -10,7 +10,7 @@ Streaming voice input for Linux, standalone or as a [Dex](https://github.com/sou
 
 ## What runs
 
-- **Hold Win for about 0.4 seconds:** live dictation. Release to insert the final text into the original input field. No Enter is sent.
+- **Hold Ctrl for the configured threshold:** live dictation. Release to insert the final text into the original input field. No Enter is sent.
 - **Hold Ctrl+Win for about 0.4 seconds:** dictate a command request. Terra returns only a command. It is copied by default, ready for manual paste. The app never runs it.
 - **`dx v`:** terminal Overview, Voice, Rewrite, Command, Tools, History and Connection tabs. All settings are centralized here. The optional TXT file remains the underlying private configuration, not a separate GUI settings page.
 - **Optional light cleanup:** remove verbal fillers/repetition and improve punctuation with a small model. Raw, fast dictation is the default; cleanup can add model latency. Timeouts preserve the original text.
@@ -18,7 +18,7 @@ Streaming voice input for Linux, standalone or as a [Dex](https://github.com/sou
 - **Hold Alt+Win for about 0.4 seconds:** experimental registered DX actions: local status queries and opening explicit documents/directories/URLs. Uses existing DX Tools; this executes registered actions, independently of command generation.
 - **Vocabulary and history:** recognition hints for names/technical terms; original/result records and re-copy actions in one local file.
 
-Ctrl alone does not start dictation. Mouse-button/wheel activity and unrelated chords suppress Win dictation until Win is released. Only action buttons catch mouse input; the rest of the floating HUD lets clicks/scroll through. The original GNOME Super overview setting is saved while the service runs and restored when it stops; other Super shortcuts remain available.
+Mouse-button/wheel activity and unrelated chords suppress dictation until Ctrl is released. Only action buttons catch mouse input; the rest of the floating HUD lets clicks/scroll through. The GNOME Super overview setting remains available.
 
 The HUD implements the Figma voice pill and transcript card, with light/dark/frosted treatments and original exported SVGs. Terminal colors follow `dx tui.engine` when available; terminal fonts remain controlled by the terminal. No new theme picker is introduced here.
 

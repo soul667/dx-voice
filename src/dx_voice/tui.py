@@ -19,7 +19,7 @@ from . import app as voice
 from .history import History
 
 # All application settings are represented here; fields are standard Textual widgets.
-SPEECH = [('hotkey_hold_ms', 'Win 长按门槛 / ms'), ('asr_provider', '识别后端'),
+SPEECH = [('hotkey_hold_ms', '长按门槛 / ms'), ('asr_provider', '识别后端'),
           ('realtime_model', '实时识别模型'), ('realtime_delay', '实时识别延迟'),
           ('source', '麦克风源（空为默认）'), ('vocabulary', '自定义词汇 / 逗号分隔'),
           ('prompt', '识别上下文提示'), ('max_seconds', '最长录音 / s'), ('theme', '浮窗外观'),
@@ -107,10 +107,10 @@ class VoiceTUI(App):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static('Win 长按：语音输入   |   Ctrl + Win：纯命令   |   Alt + Win：工具（实验）   |   设置保存在本机', id='hint')
+        yield Static('Ctrl 长按：语音输入   |   Ctrl + Win：纯命令   |   Alt + Win：工具（实验）   |   设置保存在本机', id='hint')
         with TabbedContent(initial=self.initial_tab):
             with TabPane('概览', id='overview'):
-                yield Static('Win → 说话 → 松开输入\nCtrl + Win → 说命令需求 → 松开生成纯命令\n\nCtrl / 滚轮操作不触发语音；命令不会自动执行。', id='overview-body')
+                yield Static('Ctrl → 说话 → 松开输入\nCtrl + Win → 说命令需求 → 松开生成纯命令\n\nCtrl + 滚轮操作不触发语音；命令不会自动执行。', id='overview-body')
                 with Horizontal(classes='buttons'):
                     yield Button('启动服务', id='start')
                     yield Button('停止服务', id='stop')

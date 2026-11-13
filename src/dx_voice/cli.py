@@ -28,7 +28,7 @@ def status():
     from . import app
     from . import __version__
     cfg = app.config()
-    return {'version': __version__, 'ui': 'figma-v1', 'hotkeys': {'dictation': 'Win', 'command': 'Ctrl+Win', 'tools': 'Alt+Win'},
+    return {'version': __version__, 'ui': 'figma-v1', 'hotkeys': {'dictation': 'Ctrl', 'command': 'Ctrl+Win', 'tools': 'Alt+Win'},
             'history_file': str(app.STATE / 'history.db'),
             'service_active': active(SERVICE), 'socket_present': app.SOCKET.is_socket(),
             'key_configured': bool((cfg.get('asr_api_key') or cfg.get('api_key', '')).strip()),
@@ -104,7 +104,7 @@ WantedBy=graphical-session.target
         (applications / f'dx-voice-{suffix}.desktop').write_text(f'''[Desktop Entry]
 Type=Application
 Name={name}
-Comment=Hold Win to dictate; Ctrl+Win to generate a command
+Comment=Hold Ctrl to dictate; Ctrl+Win to generate a command
 Exec=/usr/bin/env {quote('PYTHONPATH=' + str(source))} {quote(sys.executable)} -m dx_voice.cli {action}
 Icon=audio-input-microphone
 Terminal=false

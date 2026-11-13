@@ -280,7 +280,7 @@ class VoiceOverlay:
         cr.set_source_rgb(*self.colors['accent/default' if held else 'border/default'])
         cr.set_line_width(1)
         cr.stroke()
-        self.text(cr, 'Win', x, y + 6, 11, 16,
+        self.text(cr, 'Ctrl' if self.mode == 'dictation' else 'Win', x, y + 6, 11, 16,
                   'accent/default' if held else 'text/secondary', 44, latin=True, align=Pango.Alignment.CENTER)
 
     def waveform(self, cr, x, y, busy=False):
@@ -322,7 +322,7 @@ class VoiceOverlay:
             self.hitboxes['retry'] = (x + 304, y + 8, 40, 40)
         else:
             self.asset(cr, 'mic', x + 12, y + 18)
-            words = self.message if self.phase == 'info' else '已取消' if self.phase == 'cancelled' else '正在连接…' if self.phase == 'connecting' else '长按 Win 开始说话'
+            words = self.message if self.phase == 'info' else '已取消' if self.phase == 'cancelled' else '正在连接…' if self.phase == 'connecting' else '长按 Ctrl 开始说话'
             self.text(cr, words, x + 44, y + 17, role='text/secondary')
             self.keycap(cr, x + 296, y + 14, False)
 
@@ -355,7 +355,7 @@ class VoiceOverlay:
             self.text(cr, '重试', x + 356, y + 153, 12, 18, 'accent/default', medium=True)
             self.hitboxes['retry-card'] = (x + 324, y + 144, 60, 36)
         else:
-            hint = ('松开 Ctrl + Win，仅生成命令' if self.phase == 'recording' else '仅生成命令，不会自动执行') if self.mode == 'command' else '松开 Win，输入到当前窗口' if self.phase == 'recording' else '正在完成最后的识别' if self.phase == 'processing' else '已复制，请在需要的位置粘贴' if '已复制' in self.message else '你可以继续下一句'
+            hint = ('松开 Ctrl + Win，仅生成命令' if self.phase == 'recording' else '仅生成命令，不会自动执行') if self.mode == 'command' else '松开 Ctrl，输入到当前窗口' if self.phase == 'recording' else '正在完成最后的识别' if self.phase == 'processing' else '已复制，请在需要的位置粘贴' if '已复制' in self.message else '你可以继续下一句'
             if '保留原文' in self.message:
                 hint = '整理未采用，已保留原文'
             if '截图不可用' in self.message:
