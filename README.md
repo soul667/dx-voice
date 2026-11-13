@@ -24,7 +24,7 @@ Seven component families, 22 variants, seven swappable icons, and semantic light
 Install system dependencies on Ubuntu:
 
 ```bash
-sudo apt install python3-venv python3-gi python3-cairo gir1.2-gtk-3.0 \
+sudo apt install python3-venv python3-gi python3-cairo python3-gi-cairo gir1.2-gtk-3.0 \
   gir1.2-pango-1.0 gir1.2-rsvg-2.0 pulseaudio-utils xdotool xclip x11-utils
 # Optional tray icon:
 sudo apt install gir1.2-ayatanaappindicator3-0.1

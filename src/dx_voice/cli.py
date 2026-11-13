@@ -46,6 +46,12 @@ def doctor():
         result['modules']['Rsvg'] = True
     except (ImportError, ValueError):
         result['modules']['Rsvg'] = False
+    try:
+        import gi
+        gi.require_foreign('cairo')
+        result['modules']['gi-cairo'] = True
+    except (ImportError, ValueError):
+        result['modules']['gi-cairo'] = False
     result['tools'] = {name: bool(shutil.which(name))
                        for name in ('parec', 'xdotool', 'xclip', 'xprop', 'systemctl', 'xdg-open')}
     result['runtime_ready'] = (result['python_supported'] and result['display_present']

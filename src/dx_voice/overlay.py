@@ -8,6 +8,7 @@ import math
 import time
 
 import gi
+gi.require_foreign('cairo')
 gi.require_version('Gtk', '3.0')
 gi.require_version('PangoCairo', '1.0')
 gi.require_version('Rsvg', '2.0')

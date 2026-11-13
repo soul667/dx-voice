@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "voice",
   "name": "DX Voice",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Streaming voice input for Linux: hold Ctrl, speak, release. Standalone app and dx voice CLI.",
   "author": "DX Voice contributors",
   "source": "https://github.com/soul667/dx-voice",
@@ -26,7 +26,8 @@
     "secrets",
     "x-microphone",
     "x-key-state",
-    "x-clipboard"
+    "x-clipboard",
+    "x-pointer-state"
   ],
   "commands": []
 }
