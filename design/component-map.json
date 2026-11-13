@@ -1,0 +1,265 @@
+{
+  "file": "https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k",
+  "reviewNode": "8:2",
+  "coverNode": "10:2",
+  "status": "Design v0.1; GTK prototype not yet migrated",
+  "families": {
+    "Keycap": {
+      "id": "5:28",
+      "variants": [
+        {
+          "id": "5:26",
+          "name": "State=Default",
+          "width": 44,
+          "height": 28
+        },
+        {
+          "id": "5:27",
+          "name": "State=Held",
+          "width": 44,
+          "height": 28
+        }
+      ]
+    },
+    "IconButton": {
+      "id": "5:34",
+      "variants": [
+        {
+          "id": "5:31",
+          "name": "State=Default",
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "5:32",
+          "name": "State=Hover",
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "5:33",
+          "name": "State=Disabled",
+          "width": 32,
+          "height": 32
+        }
+      ]
+    },
+    "Waveform": {
+      "id": "5:47",
+      "variants": [
+        {
+          "id": "5:44",
+          "name": "Activity=Quiet",
+          "width": 160,
+          "height": 28
+        },
+        {
+          "id": "5:45",
+          "name": "Activity=Speech",
+          "width": 160,
+          "height": 28
+        },
+        {
+          "id": "5:46",
+          "name": "Activity=Busy",
+          "width": 160,
+          "height": 28
+        }
+      ]
+    },
+    "Toggle": {
+      "id": "5:110",
+      "variants": [
+        {
+          "id": "5:108",
+          "name": "Value=Off",
+          "width": 36,
+          "height": 22
+        },
+        {
+          "id": "5:109",
+          "name": "Value=On",
+          "width": 36,
+          "height": 22
+        }
+      ]
+    },
+    "TextField": {
+      "id": "5:116",
+      "variants": [
+        {
+          "id": "5:113",
+          "name": "State=Default",
+          "width": 320,
+          "height": 44
+        },
+        {
+          "id": "5:114",
+          "name": "State=Focused",
+          "width": 320,
+          "height": 44
+        },
+        {
+          "id": "5:115",
+          "name": "State=Error",
+          "width": 320,
+          "height": 44
+        }
+      ]
+    },
+    "VoicePill": {
+      "id": "5:140",
+      "variants": [
+        {
+          "id": "5:135",
+          "name": "State=Idle",
+          "width": 352,
+          "height": 56
+        },
+        {
+          "id": "5:136",
+          "name": "State=Listening",
+          "width": 352,
+          "height": 56
+        },
+        {
+          "id": "5:137",
+          "name": "State=Finishing",
+          "width": 352,
+          "height": 56
+        },
+        {
+          "id": "5:138",
+          "name": "State=Success",
+          "width": 352,
+          "height": 56
+        },
+        {
+          "id": "5:139",
+          "name": "State=Error",
+          "width": 352,
+          "height": 56
+        }
+      ]
+    },
+    "TranscriptCard": {
+      "id": "5:221",
+      "variants": [
+        {
+          "id": "5:217",
+          "name": "State=Listening",
+          "width": 400,
+          "height": 196
+        },
+        {
+          "id": "5:218",
+          "name": "State=Finishing",
+          "width": 400,
+          "height": 196
+        },
+        {
+          "id": "5:219",
+          "name": "State=Success",
+          "width": 400,
+          "height": 196
+        },
+        {
+          "id": "5:220",
+          "name": "State=Error",
+          "width": 400,
+          "height": 196
+        }
+      ]
+    }
+  },
+  "icons": {
+    "Mic": "5:2",
+    "Close": "5:6",
+    "Check": "5:9",
+    "Retry": "5:12",
+    "Settings": "5:15",
+    "Chevron": "5:19",
+    "Eye": "5:22"
+  },
+  "variables": {
+    "primitives": {
+      "white": "VariableID:2:8",
+      "gray/50": "VariableID:2:9",
+      "gray/100": "VariableID:2:10",
+      "gray/200": "VariableID:2:11",
+      "gray/400": "VariableID:2:12",
+      "gray/500": "VariableID:2:13",
+      "gray/600": "VariableID:2:14",
+      "gray/700": "VariableID:2:15",
+      "gray/800": "VariableID:2:16",
+      "gray/900": "VariableID:2:17",
+      "gray/950": "VariableID:2:18",
+      "blue/50": "VariableID:2:19",
+      "blue/400": "VariableID:2:20",
+      "blue/600": "VariableID:2:21",
+      "blue/950": "VariableID:2:22",
+      "cyan/400": "VariableID:2:23",
+      "cyan/500": "VariableID:2:24",
+      "emerald/400": "VariableID:2:25",
+      "emerald/600": "VariableID:2:26",
+      "red/50": "VariableID:2:27",
+      "red/400": "VariableID:2:28",
+      "red/600": "VariableID:2:29",
+      "red/950": "VariableID:2:30"
+    },
+    "colors": {
+      "surface/page": "VariableID:2:31",
+      "surface/panel": "VariableID:2:32",
+      "surface/raised": "VariableID:2:33",
+      "text/primary": "VariableID:2:34",
+      "text/secondary": "VariableID:2:35",
+      "text/muted": "VariableID:2:36",
+      "border/default": "VariableID:2:37",
+      "accent/default": "VariableID:2:38",
+      "accent/soft": "VariableID:2:39",
+      "wave/start": "VariableID:2:40",
+      "wave/end": "VariableID:2:41",
+      "status/success": "VariableID:2:42",
+      "status/error": "VariableID:2:43",
+      "status/error-soft": "VariableID:2:44",
+      "button/fill": "VariableID:2:45",
+      "button/text": "VariableID:2:46"
+    },
+    "metrics": {
+      "spacing/1": "VariableID:2:47",
+      "spacing/2": "VariableID:2:48",
+      "spacing/3": "VariableID:2:49",
+      "spacing/4": "VariableID:2:50",
+      "spacing/5": "VariableID:2:51",
+      "spacing/6": "VariableID:2:52",
+      "spacing/8": "VariableID:2:53",
+      "spacing/10": "VariableID:2:54",
+      "radius/sm": "VariableID:2:55",
+      "radius/md": "VariableID:2:56",
+      "radius/lg": "VariableID:2:57",
+      "radius/pill": "VariableID:2:58"
+    }
+  },
+  "textStyles": {
+    "Display": "S:db44a2e821795ddb52b19f96d6c9d8d3ec4f7be4,",
+    "Title": "S:177c8ac0b9c68adde0607f538db2f26ff49f34c1,",
+    "Body": "S:e28fc63b1fb7625b8639d133f33d2c8a30c65de6,",
+    "Body Large": "S:fd49ff4177567a3687a5c0d55b0845e3915045fd,",
+    "Label": "S:a64c436071da89a1f79c08284a3768b34a624b17,",
+    "Caption": "S:110737aa60e6efe42129aceced943a2f38c295fe,",
+    "shadow": "S:d482fe9ffe71d44a13d2cdb651388b038d6ad689,"
+  },
+  "implementation": {
+    "currentRuntime": "src/dx_voice/overlay.py:VoiceOverlay",
+    "plannedComponents": {
+      "VoicePill": "compact dictation HUD",
+      "TranscriptCard": "expanded live text",
+      "Waveform": "real microphone level history",
+      "Keycap": "hold/release hint",
+      "IconButton": "cancel/retry/settings actions",
+      "TextField": "API settings",
+      "Toggle": "settings switches"
+    },
+    "codeConnect": "Not configured: GTK/Python is not a supported Code Connect target. Mapping is documented here; no fake code binding is claimed."
+  }
+}

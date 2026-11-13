@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+settings.txt
+*.wav
+*.pcm
+*.mp3
+*.hdf5
+*.log
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.DS_Store
+
+# Local construction scripts and workflow ledgers; native design lives in Figma.
+design/figma/
