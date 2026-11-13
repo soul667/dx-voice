@@ -81,11 +81,16 @@ class Capture:
 
 
 def session_update(cfg):
+    transcription = {'model': cfg.get('realtime_model', 'gpt-live-transcribe'),
+                     'delay': cfg.get('realtime_delay', 'low'),
+                     'languages': ['zh', 'en'], 'prompt': cfg.get('prompt', '')}
+    keywords = [word.strip() for word in cfg.get('vocabulary', '').replace('，', ',').split(',')]
+    keywords = [word for word in keywords if word and len(word) <= 80 and not any(c in word for c in '<>\r\n')]
+    if keywords:
+        transcription['keywords'] = keywords[:64]
     return {'type': 'session.update', 'session': {'type': 'transcription', 'audio': {'input': {
         'format': {'type': 'audio/pcm', 'rate': RATE},
-        'transcription': {'model': cfg.get('realtime_model', 'gpt-live-transcribe'),
-                          'delay': cfg.get('realtime_delay', 'low'),
-                          'languages': ['zh', 'en'], 'prompt': cfg.get('prompt', '')},
+        'transcription': transcription,
         'turn_detection': None}}}}
 
 
@@ -122,7 +127,7 @@ class Realtime:
 
     @staticmethod
     def signature(cfg):
-        return tuple(cfg.get(k, '') for k in ('base_url', 'api_key', 'proxy_url', 'realtime_model', 'realtime_delay', 'prompt'))
+        return tuple(cfg.get(k, '') for k in ('base_url', 'api_key', 'proxy_url', 'realtime_model', 'realtime_delay', 'prompt', 'vocabulary'))
 
     def _disconnect(self):
         self.ready = False

@@ -7,10 +7,11 @@ import subprocess
 
 
 def register_cli(subparsers):
-    parser = subparsers.add_parser('voice', help='DX Voice: streaming voice input',
-                                  description='Hold Ctrl to dictate. Commands: doctor, status, setup, start, stop, settings, run, retry.')
-    parser.add_argument('voice_args', nargs=argparse.REMAINDER)
-    parser.set_defaults(extension_handler=execute)
+    for name, action in [('voice', 'status'), ('v', 'tui')]:
+        parser = subparsers.add_parser(name, help='DX Voice: voice, shell commands and terminal workspace',
+                                      description='Win: dictate. Ctrl+Win: commands. dx v: terminal settings and history.')
+        parser.add_argument('voice_args', nargs=argparse.REMAINDER)
+        parser.set_defaults(extension_handler=execute, voice_default=action)
 
 
 def execute(args):
@@ -27,4 +28,4 @@ def execute(args):
     python = python or '/usr/bin/python3'
     env = dict(os.environ)
     env['PYTHONPATH'] = str(source) + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
-    return subprocess.run([python, '-m', 'dx_voice.cli', *(args.voice_args or ['status'])], env=env).returncode
+    return subprocess.run([python, '-m', 'dx_voice.cli', *(args.voice_args or [args.voice_default])], env=env).returncode

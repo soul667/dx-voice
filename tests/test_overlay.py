@@ -3,6 +3,7 @@ import io
 import os
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 try:
     from dx_voice.overlay import VoiceOverlay, cairo, Gtk, ASSETS
@@ -70,6 +71,19 @@ class OverlayTests(unittest.TestCase):
         x, y, width, height = h.hitboxes['retry-card']
         h.on_click(None, SimpleNamespace(x=x + width / 2, y=y + height / 2, button=1))
         self.assertEqual(self.calls, ['cancel', 'retry'])
+
+    def test_frosted_material_uses_local_blurred_pixels_with_transparency(self):
+        h = self.overlay
+        h.set_theme('frosted')
+        h.phase = 'recording'
+        with patch('dx_voice.modules.screen.region_image', return_value=Image.new('RGB', (480, 344), (0, 100, 200))):
+            h._capture_backdrop((0, 0, 480, 344))
+        self.assertIsNotNone(h.backdrop)
+        pixel = self.render().getpixel((240, 90))
+        self.assertLess(pixel[0], pixel[2])
+        self.assertLess(pixel[3], 255)
+        h.close()
+        self.assertIsNone(h.backdrop)
 
     def test_all_supplied_svg_assets_are_nonempty_at_original_geometry(self):
         self.assertEqual(len(self.overlay.icons), 14)

@@ -18,3 +18,8 @@ dist/
 
 # Local construction scripts and workflow ledgers; native design lives in Figma.
 design/figma/
+
+# Private local input records
+*.db
+*.db-*
+*.sqlite

@@ -1,0 +1,19 @@
+{
+  "source": "dx tui.engine show",
+  "reference_theme": "gruvbox-dark",
+  "roles": {
+    "bg": "#282828",
+    "fg": "#ebdbb2",
+    "muted": "#928374",
+    "title": "#fabd2f",
+    "accent": "#fe8019",
+    "accent2": "#8ec07c",
+    "ok": "#b8bb26",
+    "warn": "#fabd2f",
+    "err": "#fb4934",
+    "select_bg": "#504945",
+    "select_fg": "#ebdbb2",
+    "border": "#3c3836"
+  },
+  "font": "Terminal-controlled; Fira Code + Noto Sans SC used for editable design reference"
+}

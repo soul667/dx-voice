@@ -53,6 +53,16 @@ class AdapterTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[-3:], ['-m', 'dx_voice.cli', 'doctor'])
 
+    def test_dx_v_defaults_to_terminal_workspace(self):
+        path = Path(__file__).resolve().parents[1] / 'dex_plugin.py'
+        spec = importlib.util.spec_from_file_location('voice_adapter_tui_test', path)
+        module = importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        parser = argparse.ArgumentParser();module.register_cli(parser.add_subparsers())
+        args = parser.parse_args(['v'])
+        with patch.object(module.subprocess, 'run', return_value=Mock(returncode=0)) as run:
+            args.extension_handler(args)
+        self.assertEqual(run.call_args.args[0][-3:], ['-m', 'dx_voice.cli', 'tui'])
+
 
 if __name__ == '__main__':
     unittest.main()

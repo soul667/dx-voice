@@ -37,9 +37,9 @@ Main text contrast against panels is at least 5.25:1 in the reviewed roles. Ligh
 
 ## Interaction and motion
 
-1. **Idle → Listening:** hold Ctrl alone for roughly 1200 ms. Do not take focus from the current input field.
+1. **Idle → Listening:** hold Win for roughly 400 ms (Ctrl+Win selects command mode). Do not take focus from the current input field.
 2. **Listening:** open microphone only for the active turn. Drive waveform amplitude from actual PCM, and display real incremental transcripts. No decorative loop may masquerade as audio feedback.
-3. **Listening → Finishing:** release Ctrl, drain captured tail frames, then commit the live audio turn. Preserve the preview while awaiting final text.
+3. **Listening → Finishing:** release Win, drain captured tail frames, then commit the live audio turn. Preserve the preview while awaiting final text.
 4. **Finishing → Success:** paste the final result once; never press Enter. If the active window changed, copy instead and use a copied-result message.
 5. **Error:** retain the recording locally. Retry must be explicit, since it uploads audio again.
 6. **Cancel:** another key or mouse action during a Ctrl-held turn cancels; do not insert stale partial results.
@@ -48,10 +48,20 @@ Motion target: 120–160 ms surface appearance, 80–120 ms amplitude smoothing,
 
 ## Implementation boundary
 
-The v0.2 GTK runtime implements `VoicePill`, `TranscriptCard`, `Waveform`, `Keycap` and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing Ctrl finalizes and inserts text. Settings `TextField` and `Toggle` remain design-library components awaiting a separate settings-screen implementation.
+The v0.2 GTK runtime implements `VoicePill`, `TranscriptCard`, `Waveform`, `Keycap` and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing Win finalizes and inserts text. Settings use Textual widgets in `dx v`; no separate GUI settings window is planned.
 
 Figma Code Connect does not provide a GTK/Python target, so no Code Connect integration is claimed. The documented component map is the handoff until the production UI is implemented.
 
 ## Previews
 
 ![Light and dark state gallery](states.png)
+
+## Terminal workspace v0.4
+
+[Open the editable terminal page](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110). Seven native, editable views mirror the Textual Overview, Voice, Rewrite, Command, Tools, History and Connection tabs. Repeated fields/buttons are component instances. Colors reference DX's shared Gruvbox theme, rather than a new picker. Fira Code/Noto Sans SC are design-reference fonts; the actual terminal chooses its font. The original library remains the floating HUD source, with its editable keycap label configured as Win.
+
+## Frosted material
+
+[Editable material preview](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=21-148) reuses the original HUD component instances over an editable procedural gradient. Runtime uses a local background snapshot, Gaussian blur 16, 0.80 backdrop alpha, 0.64 white tint and 0.62 border alpha. It is separate from opt-in screenshot upload for rewrite.
+
+![Frosted HUD design](frosted-workspace.png)

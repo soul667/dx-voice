@@ -109,17 +109,16 @@ class Tests(unittest.TestCase):
             self.assertNotIn('Return', keys)
 
     def test_ctrl_hold_starts_once_and_release_finishes(self):
-        hold = voice.CtrlHold()
+        hold = voice.HoldGesture()
         self.assertIsNone(hold.update(True, False, 0))
         self.assertIsNone(hold.update(True, False, .2))
-        self.assertIsNone(hold.update(True, False, .41))
-        self.assertIsNone(hold.update(True, False, 1.19))
-        self.assertEqual(hold.update(True, False, 1.21), 'start')
+        self.assertIsNone(hold.update(True, False, .39))
+        self.assertEqual(hold.update(True, False, .41), 'start')
         self.assertIsNone(hold.update(True, False, 1.5))
         self.assertEqual(hold.update(False, False, 2), 'finish')
 
     def test_ctrl_shortcut_and_quick_tap_do_not_record(self):
-        hold = voice.CtrlHold()
+        hold = voice.HoldGesture()
         self.assertIsNone(hold.update(True, False, 0))
         self.assertIsNone(hold.update(False, False, .1))
         self.assertIsNone(hold.update(True, True, 1))
@@ -127,14 +126,14 @@ class Tests(unittest.TestCase):
         self.assertIsNone(hold.update(False, False, 3))
 
     def test_other_key_cancels_active_ctrl_recording(self):
-        hold = voice.CtrlHold()
+        hold = voice.HoldGesture()
         hold.update(True, False, 0)
         self.assertEqual(hold.update(True, False, 1.3), 'start')
         self.assertEqual(hold.update(True, True, 1.4), 'cancel')
         self.assertIsNone(hold.update(False, False, 2))
 
     def test_ctrl_wheel_blocks_recording_until_ctrl_is_released(self):
-        hold = voice.CtrlHold()
+        hold = voice.HoldGesture()
         hold.update(True, False, 0)
         self.assertIsNone(hold.update(True, True, .3))
         self.assertIsNone(hold.update(True, False, 3))
@@ -143,7 +142,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(hold.update(True, False, 6.3), 'start')
 
     def test_wheel_at_release_cancels_instead_of_committing(self):
-        hold = voice.CtrlHold()
+        hold = voice.HoldGesture()
         hold.update(True, False, 0)
         hold.update(True, False, 1.3)
         self.assertEqual(hold.update(False, True, 1.4), 'cancel')
@@ -160,8 +159,23 @@ class Tests(unittest.TestCase):
         self.assertTrue(watcher.activity())
 
     def test_hold_duration_is_configurable_and_invalid_value_is_safe(self):
-        self.assertEqual(voice.hold_threshold({'ctrl_hold_ms': '1800'}), 1.8)
-        self.assertEqual(voice.hold_threshold({'ctrl_hold_ms': 'invalid'}), 1.2)
+        self.assertEqual(voice.hold_threshold({'hotkey_hold_ms': '1800'}), 1.8)
+        self.assertEqual(voice.hold_threshold({'hotkey_hold_ms': 'invalid'}), .4)
+
+    def test_ctrl_without_win_never_starts_dictation(self):
+        hold = voice.HoldGesture()
+        for time in (0, 1, 5):
+            self.assertIsNone(hold.update(False, False, time, command=True))
+        self.assertIsNone(hold.since)
+
+    def test_ctrl_win_selects_command_mode_and_release_order_is_safe(self):
+        hold = voice.HoldGesture()
+        hold.update(True, False, 0, command=True)
+        self.assertEqual(hold.update(True, False, .41, command=True), 'start')
+        self.assertEqual(hold.mode, 'command')
+        self.assertIsNone(hold.update(True, False, .5, command=False))
+        self.assertEqual(hold.mode, 'command')
+        self.assertEqual(hold.update(False, False, .6), 'finish')
 
 
 if __name__ == '__main__':

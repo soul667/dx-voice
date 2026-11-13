@@ -84,6 +84,7 @@ class VoiceOverlay:
         self.window.add(self.canvas)
         self.on_cancel, self.on_retry = on_cancel, on_retry
         self.phase = 'hidden'
+        self.mode = 'dictation'
         self.message = ''
         self._partial = ''
         self.levels = deque([0.0] * 20, maxlen=20)
@@ -93,6 +94,8 @@ class VoiceOverlay:
         self.frames = None
         self.hover = None
         self.hitboxes = {}
+        self.backdrop = None
+        self.backdrop_rect = None
         self._geometry = None
         self.icons = {}
         for variant in ('light', 'dark'):
@@ -116,7 +119,11 @@ class VoiceOverlay:
 
     @property
     def expanded(self):
-        return self.phase != 'cancelled' and (bool(self.partial) or self.phase == 'error')
+        return self.phase != 'cancelled' and (bool(self.partial) or self.phase == 'error' or self.mode in ('command', 'tools'))
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self._sync_geometry()
 
     @property
     def height(self):
@@ -126,7 +133,7 @@ class VoiceOverlay:
         if theme == 'auto':
             settings = Gtk.Settings.get_default()
             theme = 'dark' if settings and settings.get_property('gtk-application-prefer-dark-theme') else 'light'
-        self.theme = theme if theme in ('light', 'dark') else 'light'
+        self.theme = theme if theme in ('light', 'dark', 'frosted') else 'light'
         index = self.theme == 'dark'
         self.colors = {name: color(TOKENS['primitives'][values[index]])
                        for name, values in TOKENS['semantic'].items()}
@@ -146,8 +153,12 @@ class VoiceOverlay:
         display = Gdk.Display.get_default()
         _, x, y = display.get_default_seat().get_pointer().get_position()
         area = display.get_monitor_at_point(x, y).get_workarea()
-        self.window.move(area.x + (area.width - self.WIDTH) // 2,
-                         area.y + area.height - self.height - 12)
+        left = area.x + (area.width - self.WIDTH) // 2
+        top = area.y + area.height - self.height - 12
+        backdrop_rect = (left, area.y + area.height - 344 - 12, self.WIDTH, 344)
+        if self.theme == 'frosted' and self.backdrop_rect != backdrop_rect:
+            self._capture_backdrop(backdrop_rect)
+        self.window.move(left, top)
         native = self.window.get_window()
         if native:
             region = cairo.Region()
@@ -173,8 +184,9 @@ class VoiceOverlay:
             self._partial = partial
         if phase == 'cancelled':
             self._partial = ''
-        self.hide_at = time.monotonic() + (5 if phase == 'error' else 1.5) if phase in ('error', 'success', 'cancelled', 'info') else 0
+        self.hide_at = time.monotonic() + (6 if phase == 'action' else 5 if phase == 'error' else 1.5) if phase in ('error', 'success', 'cancelled', 'info', 'action') else 0
         self._sync_geometry()
+        self._position()  # Snapshot the small backdrop region before mapping the HUD.
         self.window.show_all()
         self._position()
         if self.frames is None:
@@ -184,6 +196,8 @@ class VoiceOverlay:
         if self.hide_at and time.monotonic() >= self.hide_at:
             self.window.hide()
             self.phase = 'hidden'
+            self.backdrop = None
+            self.backdrop_rect = None
             self.frames = None
             return False
         if self.phase == 'recording':
@@ -216,7 +230,7 @@ class VoiceOverlay:
         return layout.get_pixel_size()
 
     def asset(self, cr, name, x, y):
-        handle, width, height = self.icons[name, self.theme]
+        handle, width, height = self.icons[name, 'light' if self.theme == 'frosted' else self.theme]
         cr.save()
         cr.translate(x, y)
         viewport = Rsvg.Rectangle()
@@ -229,11 +243,35 @@ class VoiceOverlay:
         cr.set_source_surface(shadow(width, height, radius), x - self.MARGIN, y - self.MARGIN)
         cr.paint()
         rounded(cr, x + .5, y + .5, width - 1, height - 1, radius)
-        cr.set_source_rgb(*self.colors['surface/panel'])
-        cr.fill_preserve()
-        cr.set_source_rgb(*self.colors['border/default'])
+        if self.theme == 'frosted':
+            cr.save()
+            cr.clip_preserve()
+            if self.backdrop:
+                cr.set_source_surface(self.backdrop, 0, self.height - 344)
+                cr.paint_with_alpha(.80)
+            cr.set_source_rgba(1, 1, 1, .64 if self.backdrop else .86)
+            cr.paint()
+            cr.restore()
+            cr.set_source_rgba(1, 1, 1, .62)
+        else:
+            cr.set_source_rgb(*self.colors['surface/panel'])
+            cr.fill_preserve()
+            cr.set_source_rgb(*self.colors['border/default'])
         cr.set_line_width(1)
         cr.stroke()
+
+    def _capture_backdrop(self, rectangle):
+        self.backdrop_rect = rectangle
+        try:
+            from .modules.screen import region_image
+            x, y, width, height = rectangle
+            image = region_image({'left': x, 'top': y, 'width': width, 'height': height}).filter(ImageFilter.GaussianBlur(16))
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG')
+            buffer.seek(0)
+            self.backdrop = cairo.ImageSurface.create_from_png(buffer)
+        except Exception:
+            self.backdrop = None  # Translucent material fallback; never block dictation.
 
     def keycap(self, cr, x, y, held):
         rounded(cr, x + .5, y + .5, 43, 27, TOKENS['metrics']['radius/sm'])
@@ -242,7 +280,7 @@ class VoiceOverlay:
         cr.set_source_rgb(*self.colors['accent/default' if held else 'border/default'])
         cr.set_line_width(1)
         cr.stroke()
-        self.text(cr, 'Ctrl', x, y + 6, 11, 16,
+        self.text(cr, 'Win', x, y + 6, 11, 16,
                   'accent/default' if held else 'text/secondary', 44, latin=True, align=Pango.Alignment.CENTER)
 
     def waveform(self, cr, x, y, busy=False):
@@ -271,11 +309,11 @@ class VoiceOverlay:
         elif self.phase == 'processing':
             self.asset(cr, 'mic', x + 12, y + 18)
             self.waveform(cr, x + 44, y + 14, busy=True)
-            self.text(cr, '即将输入', x + 276, y + 19, 12, 18, 'text/secondary', medium=True)
-        elif self.phase == 'success':
+            self.text(cr, '调用工具' if self.mode == 'tools' else '生成命令' if self.mode == 'command' else '即将输入', x + 276, y + 19, 12, 18, 'text/secondary', medium=True)
+        elif self.phase in ('success', 'action'):
             self.asset(cr, 'check', x + 12, y + 18)
             copied = '已复制' in self.message
-            self.text(cr, '已复制到剪贴板' if copied else '已输入到当前窗口', x + 44, y + 17)
+            self.text(cr, 'DX Tools 动作完成' if self.mode == 'tools' else '命令已复制' if copied and self.mode == 'command' else '已复制到剪贴板' if copied else '已输入到当前窗口', x + 44, y + 17)
             self.text(cr, '完成', x + 316, y + 19, 12, 18, 'status/success', medium=True)
         elif self.phase == 'error':
             self.asset(cr, 'retry', x + 12, y + 18)
@@ -284,26 +322,32 @@ class VoiceOverlay:
             self.hitboxes['retry'] = (x + 304, y + 8, 40, 40)
         else:
             self.asset(cr, 'mic', x + 12, y + 18)
-            words = self.message if self.phase == 'info' else '已取消' if self.phase == 'cancelled' else '正在连接…' if self.phase == 'connecting' else '长按 Ctrl 开始说话'
+            words = self.message if self.phase == 'info' else '已取消' if self.phase == 'cancelled' else '正在连接…' if self.phase == 'connecting' else '长按 Win 开始说话'
             self.text(cr, words, x + 44, y + 17, role='text/secondary')
             self.keycap(cr, x + 296, y + 14, False)
 
     def _card(self, cr, x, y):
         self.panel(cr, x, y, *self.CARD, TOKENS['metrics']['radius/lg'])
-        state = 'error' if self.phase == 'error' else 'success' if self.phase == 'success' else 'accent'
+        state = 'error' if self.phase == 'error' else 'success' if self.phase in ('success', 'action') else 'accent'
         self.asset(cr, 'dot-' + state, x + 20, y + 26)
         title = {'recording': '正在聆听', 'processing': '正在完成', 'success': '输入完成',
                  'error': '连接已断开'}.get(self.phase, '正在连接')
         if self.phase == 'success' and '已复制' in self.message:
             title = '已复制，等待粘贴'
+        elif self.phase == 'error' and self.mode == 'command':
+            title = '命令未生成'
+        elif self.mode == 'command' and self.phase in ('recording', 'processing', 'connecting'):
+            title = '正在生成命令' if self.phase == 'processing' else '命令模式 · Ctrl + Win'
+        elif self.mode == 'tools':
+            title = 'DX Tools 已返回' if self.phase == 'action' else '正在调用 DX Tools' if self.phase == 'processing' else '工具模式 · Alt + Win（实验）'
         self.text(cr, title, x + 34, y + 20, 12, 18, 'text/secondary', medium=True)
         seconds = max(0, int(time.monotonic() - self.started))
         caption = f'{seconds // 60}:{seconds % 60:02d}' if self.phase == 'recording' else 'DX VOICE'
         self.text(cr, caption, x + 300, y + 21, 11, 16, 'text/muted', 80, latin=True, align=Pango.Alignment.RIGHT)
-        words = self.message if self.phase == 'error' else self.partial
+        words = self.message if self.phase == 'error' else self.partial or ('说出你想让 DX Tools 做的事…' if self.mode == 'tools' else '说出你需要的命令操作…' if self.mode == 'command' else '')
         # Long dictation keeps the newest words in the three-line live preview.
         if self.phase != 'error' and len(words) > 72:
-            words = '…' + words[-72:]
+            words = words[:160] if self.mode == 'tools' else '…' + words[-72:]
         self.text(cr, words, x + 20, y + 50, 18, 28, width=360, lines=3)
         if self.phase == 'error':
             self.text(cr, '录音不会自动重新上传', x + 20, y + 154, 11, 16, 'text/secondary', latin=True)
@@ -311,7 +355,13 @@ class VoiceOverlay:
             self.text(cr, '重试', x + 356, y + 153, 12, 18, 'accent/default', medium=True)
             self.hitboxes['retry-card'] = (x + 324, y + 144, 60, 36)
         else:
-            hint = '松开 Ctrl，输入到当前窗口' if self.phase == 'recording' else '正在完成最后的识别' if self.phase == 'processing' else '已复制，请在需要的位置粘贴' if '已复制' in self.message else '你可以继续下一句'
+            hint = ('松开 Ctrl + Win，仅生成命令' if self.phase == 'recording' else '仅生成命令，不会自动执行') if self.mode == 'command' else '松开 Win，输入到当前窗口' if self.phase == 'recording' else '正在完成最后的识别' if self.phase == 'processing' else '已复制，请在需要的位置粘贴' if '已复制' in self.message else '你可以继续下一句'
+            if '保留原文' in self.message:
+                hint = '整理未采用，已保留原文'
+            if '截图不可用' in self.message:
+                hint = '截图不可用，已按纯文本处理'
+            if self.mode == 'tools':
+                hint = '松开 Alt + Win 调用已注册动作' if self.phase == 'recording' else '完整结果保存在 dx v 历史'
             self.text(cr, hint, x + 20, y + 154, 11, 16, 'text/secondary', 300, latin=True)
             self.keycap(cr, x + 336, y + 148, self.phase == 'recording')
 
@@ -356,3 +406,5 @@ class VoiceOverlay:
             GLib.source_remove(self.frames)
             self.frames = None
         self.window.destroy()
+        self.backdrop = None
+        self.backdrop_rect = None

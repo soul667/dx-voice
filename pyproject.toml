@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dx-voice"
-version = "0.2.2"
-description = "Hold Ctrl, speak, release: streaming voice input for Linux and Dex"
+version = "0.4.0"
+description = "Modular streaming voice input, rewrite and DX actions for Linux"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 license = "MIT"
 authors = [{name = "DX Voice contributors"}]
-dependencies = ["requests>=2.31,<3", "websockets>=16,<17", "python-xlib>=0.33,<1", "Pillow>=10,<13"]
+dependencies = ["requests>=2.31,<3", "websockets>=16,<17", "python-xlib>=0.33,<1", "Pillow>=10,<13", "textual>=8,<9", "openai>=2,<3", "mss>=10,<11"]
 classifiers = ["Development Status :: 3 - Alpha", "Operating System :: POSIX :: Linux", "Topic :: Multimedia :: Sound/Audio :: Speech"]
 
 [project.urls]

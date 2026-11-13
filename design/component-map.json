@@ -2,7 +2,7 @@
   "file": "https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k",
   "reviewNode": "8:2",
   "coverNode": "10:2",
-  "status": "Figma v0.1 voice overlay implemented in GTK runtime v0.2.0",
+  "status": "Runtime v0.4: modular ASR/rewrite/command/tools, frosted HUD and Textual workspace",
   "families": {
     "Keycap": {
       "id": "5:28",
@@ -268,7 +268,9 @@
       "Keycap",
       "IconButton (cancel/retry actions)"
     ],
-    "pendingComponents": [
+    "pendingComponents": [],
+    "terminalWorkspace": "src/dx_voice/tui.py:VoiceTUI",
+    "notUsedInNativeHUD": [
       "TextField",
       "Toggle"
     ]

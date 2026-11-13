@@ -1,0 +1,71 @@
+{
+  "pageId": "17:70",
+  "boardId": "17:110",
+  "screens": {
+    "概览": "17:114",
+    "连接": "17:144",
+    "语音": "17:184",
+    "命令": "17:229",
+    "历史": "17:277",
+    "重写": "20:125",
+    "工具": "20:192"
+  },
+  "components": {
+    "field": "17:101",
+    "button": "17:107"
+  },
+  "collections": {
+    "primitive": "VariableCollectionId:17:71",
+    "color": "VariableCollectionId:17:72"
+  },
+  "textStyles": {
+    "Mono": "S:d03edd0e5f015693820d31192f821e6a30681b9b,",
+    "Mono Title": "S:a87d44ac6a77e9e13792577cd06bd1db029ccc22,",
+    "Chinese": "S:105018f5288e6ea995b82adb9d064a8aac7299fb,",
+    "Chinese Label": "S:58348dcbcf33308cb77dbfd3cccc47e90701caa9,"
+  },
+  "variables": {
+    "primitives": {
+      "bg": "VariableID:17:73",
+      "fg": "VariableID:17:74",
+      "muted": "VariableID:17:75",
+      "title": "VariableID:17:76",
+      "accent": "VariableID:17:77",
+      "accent2": "VariableID:17:78",
+      "ok": "VariableID:17:79",
+      "warn": "VariableID:17:80",
+      "err": "VariableID:17:81",
+      "select_bg": "VariableID:17:82",
+      "select_fg": "VariableID:17:83",
+      "border": "VariableID:17:84"
+    },
+    "colors": {
+      "bg": "VariableID:17:85",
+      "fg": "VariableID:17:86",
+      "muted": "VariableID:17:87",
+      "title": "VariableID:17:88",
+      "accent": "VariableID:17:89",
+      "accent2": "VariableID:17:90",
+      "ok": "VariableID:17:91",
+      "warn": "VariableID:17:92",
+      "err": "VariableID:17:93",
+      "select_bg": "VariableID:17:94",
+      "select_fg": "VariableID:17:95",
+      "border": "VariableID:17:96"
+    }
+  },
+  "counts": {
+    "text": 147,
+    "instances": 30,
+    "images": 0
+  },
+  "fontFamilies": [
+    "Fira Code",
+    "Noto Sans SC"
+  ],
+  "bounds": {
+    "width": 2312,
+    "height": 3384
+  },
+  "frostedBoardId": "21:148"
+}

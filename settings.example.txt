@@ -1,14 +1,35 @@
-# DX Voice settings. Values go after = without quotes.
-# Audio is streamed to this API only after dictation is triggered.
+# DX Voice private settings; primary editor: dx v, save with Ctrl+S.
+# Hold Win to dictate; hold Ctrl+Win for a pure command. Alt+Win runs registered DX actions.
 api_key=
 base_url=https://api.openai.com/v1
+proxy_url=
 realtime_model=gpt-live-transcribe
 realtime_delay=low
-theme=light
-ctrl_hold_ms=1200
 prompt=中文简体与 English 混合口述。保留技术术语。
+vocabulary=DX Voice,Codex,Terra,Dot,Moz,Grokbot
 source=
 max_seconds=300
-proxy_url=
-# Used only when manually retrying a saved recording:
+hotkey_hold_ms=400
+theme=frosted
+cleanup_mode=none
+cleanup_model=gpt-5.4-nano
+cleanup_timeout_s=4
+command_model=gpt-6.1-terra
+command_shell=bash
+command_output=clipboard
+command_timeout_s=25
+history_enabled=true
 model=gpt-transcribe
+
+# Overrides inherit public connection when empty.
+asr_provider=openai
+asr_api_key=
+asr_base_url=
+text_api_key=
+text_base_url=
+# Sent only when rewrite and screen context are both enabled.
+rewrite_use_screen=false
+rewrite_image_detail=low
+tools_enabled=true
+tools_model=gpt-5.4-nano
+tools_timeout_s=20
