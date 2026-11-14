@@ -169,6 +169,55 @@ class OverlayTests(unittest.TestCase):
         self.assertNotEqual(img_a.getpixel((260, 248)), img_b.getpixel((260, 248)))
         self.assertEqual(img_a.getpixel((192, 267))[:3], (10, 12, 16))
 
+    def test_minimalist_dictation_rim_is_neutral_metallic_without_sky_blue_tint(self):
+        h = self.overlay
+        h.set_mode('dictation')
+        for theme in ('light', 'dark'):
+            h.set_theme(theme)
+            self.assertFalse(h.classic)
+            h.show('recording', partial='')
+            h.ring_angle = 0.35
+            img = self.render()
+            bbox = img.getbbox()
+            self.assertIsNotNone(bbox)
+            max_blue_excess = 0.0
+            for x in range(bbox[0], bbox[2], 2):
+                for y in range(bbox[1], bbox[3], 2):
+                    r, g, b, a = img.getpixel((x, y))
+                    max_blue_excess = max(max_blue_excess, (b - r) * (a / 255.0))
+            # Neutral porcelain / obsidian / anodized silver-pewter: premultiplied blue-minus-red never exceeds 28
+            # (whereas sky-blue #0EA5E9 / #38BDF8 exceeds 140+).
+            self.assertLessEqual(max_blue_excess, 28.0, f'Unexpected sky-blue tint {max_blue_excess} on {theme}')
+
+    def test_classic_theme_variants_restore_previous_v06_hud_and_switch_cleanly(self):
+        h = self.overlay
+        for theme in ('classic-light', 'classic-dark', 'classic-frosted', 'classic-auto', 'classic'):
+            h.set_theme(theme)
+            self.assertTrue(h.classic)
+            h.show_arming(0.6, mode='dictation')
+            h.settle()
+            self.assertEqual((h.w_spring.value, h.h_spring.value), (h.CLASSIC_ARMING_W, h.CLASSIC_ARMING_H))
+            self.assertIsNotNone(self.render().getbbox())
+
+            h.show('recording', partial='')
+            h.settle()
+            self.assertEqual((h.w_spring.value, h.h_spring.value), (h.CLASSIC_COMPACT_W, h.CLASSIC_COMPACT_H))
+            self.assertIsNotNone(self.render().getbbox())
+
+            h.partial = '上一版经典卡片模式流式识别测试'
+            h.settle()
+            self.assertTrue(h.expanded)
+            self.assertEqual((h.w_spring.value, h.h_spring.value), (h.CLASSIC_EXPANDED_W, 136.0))
+            self.assertIsNotNone(self.render().getbbox())
+
+        # Switching back to minimalist 'light' restores v0.7 Pure Monolith geometry.
+        h.set_theme('light')
+        self.assertFalse(h.classic)
+        h.partial = ''
+        h.show('recording', partial='')
+        h.settle()
+        self.assertEqual((h.w_spring.value, h.h_spring.value), (h.COMPACT_W, h.COMPACT_H))
+
 
 if __name__ == '__main__':
     unittest.main()

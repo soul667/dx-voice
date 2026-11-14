@@ -18,12 +18,14 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
             async with app.run_test(size=(120, 38)) as pilot:
                 app.query_one('#hotkey_hold_ms', Input).value = '600'
                 app.query_one('#cleanup_mode', Select).value = 'light'
+                app.query_one('#theme', Select).value = 'classic-light'
                 app.query_one('#command_model', Input).value = 'gpt-6.1-terra'
                 self.assertTrue(app.query_one('#api_key', Input).password)
                 await pilot.press('ctrl+s')
                 await pilot.pause()
                 self.assertEqual(saved[0]['hotkey_hold_ms'], '600')
                 self.assertEqual(saved[0]['cleanup_mode'], 'light')
+                self.assertEqual(saved[0]['theme'], 'classic-light')
                 self.assertEqual(saved[0]['api_key'], 'test-only-secret')
 
     async def test_invalid_numeric_setting_does_not_overwrite_config(self):

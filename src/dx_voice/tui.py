@@ -84,7 +84,16 @@ CHOICES = {
     'cleanup_mode': [('关闭 · 原文直出最快', 'none'), ('开启 · 保守重写', 'light')],
     'realtime_delay': [(x, x) for x in ('minimal', 'low', 'medium', 'high', 'xhigh')],
     'rewrite_image_detail': [(x, x) for x in ('low', 'high', 'auto')],
-    'theme': [('半透磨砂 · Carbon Glass', 'frosted'), ('浅色 · Pearl', 'light'), ('深色 · Obsidian', 'dark'), ('跟随桌面', 'auto')],
+    'theme': [
+        ('极简浅色 · Minimal Light', 'light'),
+        ('极简深色 · Minimal Dark', 'dark'),
+        ('极简磨砂 · Minimal Frosted', 'frosted'),
+        ('极简跟随桌面 · Minimal Auto', 'auto'),
+        ('经典浅色（上一版） · Classic Light', 'classic-light'),
+        ('经典深色（上一版） · Classic Dark', 'classic-dark'),
+        ('经典磨砂（上一版） · Classic Frosted', 'classic-frosted'),
+        ('经典跟随桌面（上一版） · Classic Auto', 'classic-auto'),
+    ],
     'command_shell': [(x, x) for x in ('bash', 'fish', 'zsh', 'sh')],
     'command_output': [('只复制 · 手动粘贴', 'clipboard'), ('填入当前窗口 · 不回车', 'paste')],
 }

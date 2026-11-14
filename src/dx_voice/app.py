@@ -81,7 +81,7 @@ def save_config(data):
                            ('max_seconds', '单次最长秒数，最多 600 秒'),
                            ('proxy_url', '网络代理地址；留空使用进程环境代理'),
                            ('realtime_model', '实时语音识别模型'), ('realtime_delay', '实时延迟：minimal 最快，low 兼顾准确率'),
-                           ('theme', '浮窗主题：frosted / light / dark / auto'),
+                           ('theme', '浮窗主题：light / dark / frosted / auto 或上一版 classic-light / classic-dark / classic-frosted / classic-auto'),
                            ('hotkey_hold_ms', '单键 Ctrl 长按触发时长，毫秒（Ctrl+Win / Alt+Win 组合键固定约 400ms）'),
                            ('cleanup_mode', '口述整理：none 直出 / light 轻整理'), ('cleanup_model', '轻整理模型'),
                            ('cleanup_timeout_s', '轻整理超时秒数，超时保留原文'),
