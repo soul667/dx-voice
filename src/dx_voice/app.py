@@ -27,8 +27,12 @@ DEFAULT = dict(base_url='https://api.openai.com/v1', model='gpt-transcribe',
                cleanup_mode='none', cleanup_model='gpt-5.4-nano', cleanup_timeout_s=4,
                command_model='gpt-6.1-terra', command_shell=Path(os.environ.get('SHELL', '/bin/bash')).name if Path(os.environ.get('SHELL', '/bin/bash')).name in ('bash', 'sh', 'fish', 'zsh') else 'bash', command_output='clipboard', command_timeout_s=25,
                asr_provider='openai', asr_api_key='', asr_base_url='', text_api_key='', text_base_url='',
-               rewrite_use_screen='false', rewrite_image_detail='low', tools_enabled='true', tools_model='gpt-5.4-nano', tools_timeout_s=20,
+               rewrite_use_screen='false', rewrite_image_detail='low',
+               context_enabled='true', context_roots='',
+               tools_enabled='true', tools_model='gpt-5.4-nano', tools_timeout_s=20,
                history_enabled='true', vocabulary='DX Voice,Codex,Terra,Dot,Moz,Grokbot')
+
+_CONFIG_CACHE = {'path': None, 'mtime_ns': -1, 'env': None, 'data': None}
 
 
 def private_dir(path):
@@ -50,13 +54,27 @@ def config():
     return result
 
 
+def cached_config():
+    try:
+        mtime = CONFIG.stat().st_mtime_ns
+    except OSError:
+        mtime = -1
+    env = (os.environ.get('OPENAI_API_KEY', ''), os.environ.get('OPENAI_BASE_URL', ''))
+    if (_CONFIG_CACHE['path'] == CONFIG and _CONFIG_CACHE['mtime_ns'] == mtime
+            and _CONFIG_CACHE['env'] == env and _CONFIG_CACHE['data'] is not None):
+        return _CONFIG_CACHE['data']
+    data = config()
+    _CONFIG_CACHE.update({'path': CONFIG, 'mtime_ns': mtime, 'env': env, 'data': data})
+    return data
+
+
 def save_config(data):
     private_dir(CONFIG.parent)
     fd, name = tempfile.mkstemp(dir=CONFIG.parent)
     with os.fdopen(fd, 'w', encoding='utf-8') as out:
         out.write('# 语音输入法设置：填在等号右边，不要加引号。保存后下次录音自动生效。\n'
                   '# API Key 只填在本机；录音会发送到下方 API 地址。\n'
-                  '# 操作：长按 Ctrl 语音输入；长按 Ctrl+Win 生成纯命令；松开完成。\n\n')
+                  '# 操作：长按 Ctrl 语音输入；长按 Ctrl+Win 生成纯命令；长按 Alt+Win 调用工具；松开完成。\n\n')
         for key, title in [('api_key', '你的 OpenAI API Key'), ('base_url', 'API 基础地址，含 /v1；可填兼容中转地址'),
                            ('model', '语音模型；中转不支持默认模型时，填服务商支持的语音模型名'),
                            ('prompt', '中文 / 英文及专业术语提示'), ('source', '麦克风源：留空使用系统默认'),
@@ -64,7 +82,7 @@ def save_config(data):
                            ('proxy_url', '网络代理地址；留空使用进程环境代理'),
                            ('realtime_model', '实时语音识别模型'), ('realtime_delay', '实时延迟：minimal 最快，low 兼顾准确率'),
                            ('theme', '浮窗主题：frosted / light / dark / auto'),
-                           ('hotkey_hold_ms', 'Win / Ctrl+Win / Alt+Win 长按触发时长，毫秒'),
+                           ('hotkey_hold_ms', '单键 Ctrl 长按触发时长，毫秒（Ctrl+Win / Alt+Win 组合键固定约 400ms）'),
                            ('cleanup_mode', '口述整理：none 直出 / light 轻整理'), ('cleanup_model', '轻整理模型'),
                            ('cleanup_timeout_s', '轻整理超时秒数，超时保留原文'),
                            ('command_model', '命令生成模型'), ('command_shell', '目标 shell：bash / sh / zsh / fish'),
@@ -74,6 +92,8 @@ def save_config(data):
                            ('asr_provider', '语音后端，内置 openai；其他后端由适配器提供'),
                            ('asr_api_key', '语音后端专用 Key，留空继承公共连接'), ('asr_base_url', '语音后端专用地址，留空继承'),
                            ('text_api_key', '重写/命令/工具路由专用 Key，留空继承'), ('text_base_url', '文字模型专用地址，留空继承'),
+                           ('context_enabled', '工作区上下文索引：true / false，读取当前窗口与本地项目目录结构辅助识别'),
+                           ('context_roots', '额外索引的工作目录根路径，逗号分隔；留空自动发现常用项目目录'),
                            ('rewrite_use_screen', '截图辅助重写：true / false，开启后发送当前鼠标所在屏幕'),
                            ('rewrite_image_detail', '截图精度：low / high / auto'),
                            ('tools_enabled', '实验 DX Tools 模块：true / false'), ('tools_model', '动作选择模型'),
@@ -81,6 +101,7 @@ def save_config(data):
             value = str(data.get(key, DEFAULT[key])).replace('\n', ' ').replace('\r', ' ')
             out.write(f'# {title}\n{key}={value}\n\n')
     os.replace(name, CONFIG)
+    _CONFIG_CACHE['data'] = None
 
 
 def notify(body):
@@ -145,7 +166,11 @@ def paste(text, target):
         return False
     try:
         wmclass = subprocess.check_output(['xprop', '-id', target, 'WM_CLASS'], text=True, timeout=2).lower()
-        terminal = any(x in wmclass for x in ('terminal', 'kitty', 'alacritty', 'terminator', 'wezterm', 'konsole'))
+        terminal = any(x in wmclass for x in (
+            'terminal', 'kitty', 'alacritty', 'terminator', 'wezterm', 'konsole',
+            'ghostty', 'foot', 'tilix', 'xfce4-terminal', 'mate-terminal', 'lxterminal',
+            'sakura', 'rio', 'warp', 'tabby', 'hyper',
+        ))
         key = 'ctrl+shift+v' if terminal else 'ctrl+v'
         subprocess.run(['xdotool', 'key', '--clearmodifiers', '--delay', '0', key], check=True, timeout=3)
         return True
@@ -154,9 +179,10 @@ def paste(text, target):
 
 
 class HoldGesture:
-    """Hold Win alone or Ctrl+Win; other shortcuts and mouse actions take precedence."""
-    def __init__(self, threshold=.4):
+    """Hold Ctrl alone, Ctrl+Win, or Alt+Win; other shortcuts and mouse actions take precedence."""
+    def __init__(self, threshold=.4, chord_threshold=None):
         self.threshold = threshold
+        self.chord_threshold = chord_threshold
         self.mode = 'dictation'
         self.since = None
         self.active = False
@@ -186,20 +212,42 @@ class HoldGesture:
             self.since = now
         if self.since is None:
             self.since = now
-        if now - self.since >= self.threshold:
+        needed = (self.chord_threshold if self.chord_threshold is not None else min(self.threshold, .4)) if self.mode in ('command', 'tools') else self.threshold
+        if now - self.since >= needed:
             self.active = True
             return 'start'
         return None
 
 
+def resolve_modifier_codes(keyboard):
+    """Collect X11 keycodes for Control, Super/Win, and Alt/Meta including XKB aliases."""
+    from Xlib import X, XK
+    mapping = keyboard.get_keyboard_mapping(8, 248)
+    super_symbols = {sym for k in ('Super_L', 'Super_R', 'Hyper_L', 'Hyper_R') if (sym := XK.string_to_keysym(k))}
+    ctrl_symbols = {sym for k in ('Control_L', 'Control_R') if (sym := XK.string_to_keysym(k))}
+    alt_symbols = {sym for k in ('Alt_L', 'Alt_R', 'Meta_L', 'Meta_R') if (sym := XK.string_to_keysym(k))}
+    ctrl_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & ctrl_symbols}
+    super_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & super_symbols}
+    alt_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & alt_symbols}
+    modmap = keyboard.get_modifier_mapping()
+    if modmap and len(modmap) > X.Mod4MapIndex:
+        ctrl_codes |= {int(code) for code in modmap[X.ControlMapIndex] if code}
+        alt_codes |= {int(code) for code in modmap[X.Mod1MapIndex] if code}
+        super_codes |= {int(code) for code in modmap[X.Mod4MapIndex] if code}
+    super_codes -= ctrl_codes
+    alt_codes -= (ctrl_codes | super_codes)
+    return ctrl_codes, super_codes, alt_codes
+
+
 class PointerWatch:
-    """Passive XI2 mouse-button observer; wheel presses survive the polling interval."""
+    """Passive XI2 keyboard+pointer observer; avoids idle polling and catches wheel taps."""
     def __init__(self, connection):
         from Xlib.ext import xinput
         self.connection = connection
         self.root = connection.screen().root
         self.raw_button_press = xinput.RawButtonPress
-        self.root.xinput_select_events([(xinput.AllMasterDevices, xinput.RawButtonPressMask)])
+        mask = xinput.RawKeyPressMask | xinput.RawKeyReleaseMask | xinput.RawButtonPressMask
+        self.root.xinput_select_events([(xinput.AllMasterDevices, mask)])
         connection.sync()
 
     def activity(self):
@@ -226,8 +274,9 @@ class App:
         gi.require_version('Gtk', '3.0')
         from gi.repository import Gtk, GLib
         self.Gtk, self.GLib = Gtk, GLib
+        cfg = cached_config()
         from .overlay import VoiceOverlay
-        self.overlay = VoiceOverlay(theme=config().get('theme', 'light'),
+        self.overlay = VoiceOverlay(theme=cfg.get('theme', 'light'),
                                     on_cancel=lambda: self.command('cancel'),
                                     on_retry=lambda: self.command('retry'))
         global STATUS_UI
@@ -244,15 +293,19 @@ class App:
         self.indicator = None
         private_dir(STATE)
         from .history import History
+        from .modules.context import ContextIndex
         from .text_tools import TextTools
         self.history = History(STATE / 'history.db')
+        self.context_index = ContextIndex(STATE / 'context.db')
         self.text_tools = TextTools()
         self.mode = 'dictation'
         self.history_on = True
         self.history_error = False
         self.raw_text = ''
+        self.snapshot = None
         self.screen_context = None
         self.screen_context_error = False
+        self._screen_ready = None
         self.lock = open(RUNTIME / 'dx-voice.lock', 'w')
         fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         SOCKET.unlink(missing_ok=True)
@@ -260,28 +313,22 @@ class App:
         self.sock.bind(str(SOCKET))
         SOCKET.chmod(0o600)
         GLib.io_add_watch(self.sock.fileno(), GLib.IO_IN, self.receive)
-        GLib.timeout_add(200, self.tick)
+        GLib.timeout_add(500, self.tick)
         # Query only current key state: no key grabs, no text-event recording.
-        from Xlib import display, XK
+        from Xlib import display
         self.keyboard = display.Display()
-        # Include every XKB alias, including the additional Super_L XTEST keycode.
-        mapping = self.keyboard.get_keyboard_mapping(8, 248)
-        super_symbols = {XK.string_to_keysym(k) for k in ('Super_L', 'Super_R')}
-        ctrl_symbols = {XK.string_to_keysym(k) for k in ('Control_L', 'Control_R')}
-        self.super_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & super_symbols}
         from .shortcuts import SuperBinding
         self.super_binding = SuperBinding(STATE)
-        self.ctrl_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & ctrl_symbols}
-        alt_symbols = {XK.string_to_keysym(k) for k in ('Alt_L', 'Alt_R')}
-        self.alt_codes = {index + 8 for index, row in enumerate(mapping) if set(row) & alt_symbols}
+        self.ctrl_codes, self.super_codes, self.alt_codes = resolve_modifier_codes(self.keyboard)
         self.pointer_watch = PointerWatch(self.keyboard)
-        self.hold = HoldGesture(hold_threshold(config()))
-        GLib.timeout_add(25, self.poll_hotkey)
+        self.hold = HoldGesture(hold_threshold(cfg))
+        self._hold_timer = None
+        GLib.io_add_watch(self.keyboard.fileno(), GLib.IO_IN, self._on_x11_io)
         from .modules.asr import load_backend
-        self.asr_name = config().get('asr_provider', 'openai')
+        self.asr_name = cfg.get('asr_provider', 'openai')
         self.asr_backend = load_backend(self.asr_name)
         self.realtime = self.asr_backend.create_realtime(lambda kind, token, data: GLib.idle_add(self._network_event, kind, token, data))
-        self.realtime.prepare(self.asr_backend.settings(config()))
+        self.realtime.prepare(self.asr_backend.settings(cfg))
         # Win alone stays available to GNOME.
         try:
             gi.require_version('AyatanaAppIndicator3', '0.1')
@@ -298,6 +345,22 @@ class App:
         except (ValueError, ImportError):
             pass
 
+    def _on_x11_io(self, *_):
+        self.poll_hotkey()
+        self._ensure_hold_timer()
+        return True
+
+    def _ensure_hold_timer(self):
+        if self._hold_timer is None and (self.hold.since is not None or self.hold.active or self.hold.suppressed or self.phase == 'recording'):
+            self._hold_timer = self.GLib.timeout_add(20, self._hold_tick)
+
+    def _hold_tick(self):
+        self.poll_hotkey()
+        if self.hold.since is not None or self.hold.active or self.hold.suppressed or self.phase == 'recording':
+            return True
+        self._hold_timer = None
+        return False
+
     def poll_hotkey(self):
         state = self.keyboard.query_keymap()
         pressed = {k for k in range(8, 256) if state[k // 8] & (1 << (k % 8))}
@@ -306,10 +369,14 @@ class App:
         alt = bool(pressed & self.alt_codes)
         tools = super_key and alt and not control
         command = control and super_key and not alt
-        ctrl = control or tools
+        keep_chord = self.hold.active and (
+            (self.hold.mode == 'tools' and (super_key or alt) and not control)
+            or (self.hold.mode == 'command' and (control or super_key) and not alt)
+        )
+        ctrl = control or tools or keep_chord
         other = (control and alt) or bool(pressed - (self.super_codes | self.ctrl_codes | self.alt_codes)) or self.pointer_watch.activity()
         if ctrl and not other and self.hold.since is None and not self.hold.suppressed:
-            self.hold.threshold = hold_threshold(config())
+            self.hold.threshold = hold_threshold(cached_config())
         action = self.hold.update(ctrl, other, time.monotonic(), command=command, tools=tools)
         if action == 'start':
             if self.phase == 'idle':
@@ -374,7 +441,8 @@ class App:
     def start(self, mode='dictation'):
         import uuid
         from .modules.asr import load_backend
-        cfg = config()
+        from .modules.context import enrich_asr_settings, inspect_active_window
+        cfg = cached_config()
         requested = cfg.get('asr_provider', 'openai')
         if requested != self.asr_name:
             backend = load_backend(requested)
@@ -386,13 +454,25 @@ class App:
             notify('请先在设置中填写语音后端 API Key。')
             self.command('settings')
             return
-        self.overlay.set_theme(cfg.get('theme', 'light'))
-        self.target = active_window()
-        self.token = uuid.uuid4().hex
-        self.mode = mode
         if mode == 'tools' and str(cfg.get('tools_enabled', 'true')).lower() != 'true':
             notify('实验工具模块已关闭，可在 dx v 中开启。')
             return
+        self.overlay.set_theme(cfg.get('theme', 'light'))
+        self.snapshot = None
+        context_on = str(cfg.get('context_enabled', 'true')).lower() == 'true'
+        if context_on:
+            try:
+                self.snapshot = inspect_active_window(self.keyboard)
+                self.context_index.refresh(cfg, self.snapshot)
+            except Exception:
+                self.snapshot = None
+        self.target = (self.snapshot.window_id if self.snapshot and self.snapshot.window_id else '') or active_window()
+        ctx_label = ''
+        if self.snapshot:
+            ctx_label = Path(self.snapshot.workspace_root).name if self.snapshot.workspace_root else self.snapshot.app_name
+        self.overlay.set_context_label(ctx_label)
+        self.token = uuid.uuid4().hex
+        self.mode = mode
         self.overlay.set_mode(mode)
         self.turn_cfg = cfg
         self.history_on = str(cfg.get('history_enabled', 'true')).lower() in ('true', '1', 'yes', 'on')
@@ -400,6 +480,7 @@ class App:
         self.raw_text = ''
         self.screen_context = None
         self.screen_context_error = False
+        self._screen_ready = None
         token = self.token
         fd, name = tempfile.mkstemp(prefix='speech-' + mode + '-', suffix='.wav', dir=STATE)
         os.close(fd)
@@ -413,7 +494,15 @@ class App:
         self.released_at = None
         self.first_delta = None
         self.overlay.show('connecting', partial='')
-        self.realtime.begin(token, self.asr_backend.settings(cfg))
+        asr_cfg = self.asr_backend.settings(cfg)
+        if context_on:
+            try:
+                asr_cfg = enrich_asr_settings(asr_cfg, self.snapshot, self.context_index)
+                if self.snapshot and self.snapshot.workspace_root:
+                    self.context_index.maybe_distill_async(self.text_tools, cfg, self.snapshot.workspace_root)
+            except Exception:
+                pass
+        self.realtime.begin(token, asr_cfg)
         def chunk(data, level):
             self.realtime.append(token, data)
             self.overlay.level = level
@@ -454,15 +543,26 @@ class App:
         self.phase = 'finishing'
         self.released_at = time.monotonic()
         self.stop_recorder()
-        if self.mode == 'dictation' and self.turn_cfg.get('cleanup_mode') == 'light' and str(self.turn_cfg.get('rewrite_use_screen','false')).lower() == 'true':
-            from .modules.screen import capture_rewrite_context
-            try:
-                self.screen_context = capture_rewrite_context(self.turn_cfg)
-            except Exception:
-                self.screen_context = None
-                self.screen_context_error = True
-                self.record(processing='screen-context-unavailable')
         self.overlay.show('processing', partial=self.overlay.partial)
+        if self.mode == 'dictation' and self.turn_cfg.get('cleanup_mode') == 'light' and str(self.turn_cfg.get('rewrite_use_screen', 'false')).lower() == 'true':
+            token = self.token
+            turn_cfg = self.turn_cfg
+            ready = threading.Event()
+            self._screen_ready = ready
+            def grab():
+                from .modules.screen import capture_rewrite_context
+                try:
+                    image = capture_rewrite_context(turn_cfg)
+                    if token == self.token:
+                        self.screen_context = image
+                except Exception:
+                    if token == self.token:
+                        self.screen_context = None
+                        self.screen_context_error = True
+                        self.record(processing='screen-context-unavailable')
+                finally:
+                    ready.set()
+            threading.Thread(target=grab, daemon=True).start()
 
     def _audio_done(self, token, seconds, cancelled, error):
         if token != self.token:
@@ -523,10 +623,13 @@ class App:
         import uuid
         self.token = uuid.uuid4().hex
         self.turn_cfg = config()
+        self.snapshot = None
         self.screen_context = None
         self.screen_context_error = False
+        self._screen_ready = None
         self.history_on = str(self.turn_cfg.get('history_enabled', 'true')).lower() == 'true'
         self.history_error = False
+        self.overlay.set_context_label('')
         self.overlay.set_mode(self.mode)
         self.record_begin()
         self.phase = 'retrying'
@@ -566,19 +669,36 @@ class App:
         self.phase = 'processing'
         self.overlay.show('processing', partial=raw)
         token = self.token
+        screen_ready = getattr(self, '_screen_ready', None)
         def work():
             try:
+                if screen_ready is not None:
+                    screen_ready.wait(timeout=2.0)
+                context_text = ''
+                workspaces = None
+                active_workspace = ''
+                if str(cfg.get('context_enabled', 'true')).lower() == 'true' and getattr(self, 'context_index', None) is not None:
+                    try:
+                        from .modules.context import build_turn_context
+                        recent_hist = self.history.recent(5) if self.history_on else None
+                        snap = getattr(self, 'snapshot', None)
+                        active_workspace = getattr(snap, 'workspace_root', '') if snap else ''
+                        workspaces = self.context_index.recent(10)
+                        context_text = build_turn_context(raw, snap, self.context_index, recent_hist)
+                    except Exception:
+                        context_text = ''
                 if self.mode == 'tools':
                     from .modules.tools import run
-                    outcome = run(self.text_tools, raw, cfg)
+                    outcome = run(self.text_tools, raw, cfg, context_text=context_text,
+                                  workspaces=workspaces, active_workspace=active_workspace)
                     self.GLib.idle_add(self.complete_tools, token, outcome)
                 elif self.mode == 'command':
                     from .modules.command import generate
-                    outcome = generate(self.text_tools, raw, cfg)
+                    outcome = generate(self.text_tools, raw, cfg, context_text=context_text)
                     self.GLib.idle_add(done, outcome.text, '', outcome.processing)
                 else:
                     from .modules.rewrite import process
-                    outcome = process(self.text_tools, raw, cfg, self.screen_context)
+                    outcome = process(self.text_tools, raw, cfg, self.screen_context, context_text=context_text)
                     if self.screen_context_error:
                         outcome.processing += ':no-screen'
                     self.GLib.idle_add(done, outcome.text, '', outcome.processing)
@@ -600,6 +720,7 @@ class App:
         self.overlay.show('action', 'DX Tools 动作完成', partial=outcome.text)
         self.path.unlink(missing_ok=True)
         self.screen_context = None
+        self._screen_ready = None
         return False
 
     def complete(self, text, error, processing='raw'):

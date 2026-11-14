@@ -17,6 +17,7 @@ from rich.text import Text
 
 from . import app as voice
 from .history import History
+from .modules.context import ContextIndex, inspect_active_window
 
 # All application settings are represented here; fields are standard Textual widgets.
 SPEECH = [('hotkey_hold_ms', '长按门槛 / ms'), ('asr_provider', '识别后端'),
@@ -25,8 +26,9 @@ SPEECH = [('hotkey_hold_ms', '长按门槛 / ms'), ('asr_provider', '识别后�
           ('prompt', '识别上下文提示'), ('max_seconds', '最长录音 / s'), ('theme', '浮窗外观'),
           ('asr_api_key', 'ASR Key（空则继承）'), ('asr_base_url', 'ASR 地址（空则继承）')]
 REWRITE = [('cleanup_mode', '快速重写开关'), ('cleanup_model', '快速重写模型'),
-           ('cleanup_timeout_s', '重写超时 / s'), ('rewrite_use_screen', '提供当前鼠标屏幕截图'),
-           ('rewrite_image_detail', '截图精度')]
+           ('cleanup_timeout_s', '重写超时 / s'),
+           ('context_enabled', '智能工作区上下文索引'), ('context_roots', '额外索引目录（逗号分隔，空则自动）'),
+           ('rewrite_use_screen', '提供当前鼠标屏幕截图'), ('rewrite_image_detail', '截图精度')]
 COMMAND = [('command_model', '命令模型'), ('command_shell', '目标 Shell'),
            ('command_output', '命令输出'), ('command_timeout_s', '生成超时 / s')]
 TOOLS = [('tools_enabled', '开启实验工具模块'), ('tools_model', '动作选择模型'), ('tools_timeout_s', '动作选择超时 / s')]
@@ -34,7 +36,7 @@ CONNECTION = [('api_key', '公共 API Key'), ('base_url', '公共 API 地址'), 
               ('text_api_key', '文字 Key（空则继承）'), ('text_base_url', '文字地址（空则继承）'),
               ('model', '失败录音重试模型'), ('history_enabled', '记录本地输入历史')]
 ALL_FIELDS = SPEECH + REWRITE + COMMAND + TOOLS + CONNECTION
-SWITCHES = {'history_enabled', 'rewrite_use_screen', 'tools_enabled'}
+SWITCHES = {'history_enabled', 'rewrite_use_screen', 'tools_enabled', 'context_enabled'}
 CHOICES = {'cleanup_mode': [('关闭 · 原文直出最快', 'none'), ('开启 · 保守重写', 'light')],
            'realtime_delay': [(x, x) for x in ('minimal', 'low', 'medium', 'high', 'xhigh')],
            'rewrite_image_detail': [(x,x) for x in ('low','high','auto')],
@@ -68,8 +70,10 @@ class VoiceTUI(App):
     .field Input, .field Select { width: 1fr; }
     .field Switch { margin-top: 1; }
     #overview { height: auto; padding: 1 2; border: round $primary; }
-    #history-table { height: 11; }
-    #history-detail { height: 10; }
+    #context-preview { height: auto; padding: 1; margin-top: 1; border: round $panel; color: $text-muted; }
+    #history-search { margin-bottom: 1; }
+    #history-table { height: 10; }
+    #history-detail { height: 9; }
     #command-result { height: 9; }
     #tools-result { height: 9; }
     #command-request { margin-top: 1; }
@@ -77,11 +81,16 @@ class VoiceTUI(App):
     .note { height: auto; margin-bottom: 1; color: $text-muted; }
     '''
 
-    def __init__(self, settings=None, save=None, history_path=None, palette=None, initial_tab='overview'):
+    def __init__(self, settings=None, save=None, history_path=None, palette=None, initial_tab='overview', context_path=None):
         super().__init__()
         self.values = dict(voice.DEFAULT, **(voice.config() if settings is None else settings))
         self.save_settings = save or voice.save_config
-        self.history = History(history_path or voice.STATE / 'history.db')
+        resolved_history = Path(history_path) if history_path else voice.STATE / 'history.db'
+        self.history = History(resolved_history)
+        resolved_context = Path(context_path) if context_path else (
+            resolved_history.with_name('context.db') if history_path else voice.STATE / 'context.db'
+        )
+        self.context_index = ContextIndex(resolved_context)
         self.initial_tab = initial_tab
         self.rows = {}
         self.selected = None
@@ -106,23 +115,33 @@ class VoiceTUI(App):
                     yield Input(value, password=key.endswith('api_key'), id=key)
 
     def compose(self) -> ComposeResult:
+        hold_ms = self.values.get('hotkey_hold_ms', '400')
+        chord_ms = min(400, int(float(hold_ms))) if str(hold_ms).replace('.', '', 1).isdigit() else 400
         yield Header()
         yield Static('Ctrl 长按：语音输入   |   Ctrl + Win：纯命令   |   Alt + Win：工具（实验）   |   设置保存在本机', id='hint')
         with TabbedContent(initial=self.initial_tab):
             with TabPane('概览', id='overview'):
-                yield Static('Ctrl → 说话 → 松开输入\nCtrl + Win → 说命令需求 → 松开生成纯命令\n\nCtrl + 滚轮操作不触发语音；命令不会自动执行。', id='overview-body')
+                yield Static(
+                    f'Ctrl 长按 ({hold_ms}ms) → 说话 → 松开输入\n'
+                    f'Ctrl + Win ({chord_ms}ms) → 说命令需求 → 松开生成纯命令\n'
+                    f'Alt + Win ({chord_ms}ms) → 调用本地 DX / 工作区工具动作\n\n'
+                    'Ctrl + 滚轮操作不触发语音；命令不会自动执行。',
+                    id='overview-body',
+                )
                 with Horizontal(classes='buttons'):
                     yield Button('启动服务', id='start')
                     yield Button('停止服务', id='stop')
+                    yield Button('刷新上下文索引', id='refresh-context')
                 yield Static('', id='service-status', markup=False)
-                yield Static('TUI 主题跟随 DX 共享主题引擎，不在这里重复设置。\n原文直出不增加模型等待；轻整理会额外调用小模型。', classes='note')
+                yield Static('', id='context-preview', markup=False)
+                yield Static('TUI 主题跟随 DX 共享主题引擎；工作区上下文索引默认在本地 SQLite FTS5 运行，仅传摘要术语，不上传源码或密钥。', classes='note')
             with TabPane('语音', id='speech'):
                 with VerticalScroll():
                     yield Static('当前内置 OpenAI；千问等后端通过独立 ASR 适配器接入。', classes='note')
                     yield from self.fields(SPEECH)
             with TabPane('重写', id='rewrite'):
                 with VerticalScroll():
-                    yield Static('只影响普通语音输入。截图是独立开关：开启后会发送鼠标所在屏幕，本地历史不存图。关闭重写或截图开关时不向模型发送截图。', classes='note')
+                    yield Static('工作区上下文索引与屏幕截图独立可控：索引仅提取项目名、目录结构与术语，帮助修正同音错字；截图仍需手动开启，本地历史不存图。', classes='note')
                     yield from self.fields(REWRITE)
             with TabPane('命令', id='command'):
                 with VerticalScroll():
@@ -138,13 +157,14 @@ class VoiceTUI(App):
                     yield from self.fields(TOOLS)
                     from .modules.tools import CATALOG
                     yield Static('支持动作：' + ' / '.join(v[0] for v in CATALOG.values()), classes='note')
-                    yield Input(placeholder='例如：查看显示器状态 / 打开下载目录', id='tools-request')
+                    yield Input(placeholder='例如：查看显示器状态 / 查看当前工作区状态 / 打开下载目录', id='tools-request')
                     with Horizontal(classes='buttons'):
                         yield Button('调用 DX Tools', id='run-tool', variant='primary')
                         yield Button('复制结果', id='copy-tools', disabled=True)
                     yield TextArea(read_only=True, id='tools-result', show_cursor=False)
             with TabPane('历史', id='history'):
                 yield Static(str(self.history.path), classes='note', markup=False)
+                yield Input(placeholder='搜索历史原文、结果、模式或状态…', id='history-search')
                 yield DataTable(id='history-table', cursor_type='row')
                 with Horizontal(classes='buttons'):
                     yield Button('复制结果', id='copy-result')
@@ -190,16 +210,47 @@ class VoiceTUI(App):
             state = status()
             self.query_one('#service-status', Static).update('服务：' + ('运行中' if state['service_active'] else '已停止') +
                                                             '  |  Key：' + ('已配置' if state['key_configured'] else '未配置'))
-            table = self.query_one('#history-table', DataTable)
-            table.clear()
+            self._update_context_preview()
             self.rows = {row['id']: row for row in self.history.recent(100)}
-            for row in self.rows.values():
-                summary = (row['result'] or row['raw'] or row['error']).replace('\n', ' ')[:75]
-                label = {'recording': '录音中', 'processing': '处理中', 'inserted': '已输入', 'copied': '已复制',
-                         'failed': '失败', 'cancelled': '已取消', 'generated': '已生成', 'saved': '已保存', 'executed':'已执行', 'launched':'已请求打开'}.get(row['status'], row['status'])
-                table.add_row(row['created_at'][5:19].replace('T',' '), {'command':'命令','tools':'工具','dictation':'语音'}.get(row['mode'],row['mode']), label, Text(summary), key=row['id'])
+            search = self.query_one('#history-search', Input).value
+            self._populate_history_table(search)
         except (OSError, RuntimeError, sqlite3.Error):
             self.notify('状态或历史暂时不可读取。', severity='warning')
+
+    def _update_context_preview(self):
+        recent = self.context_index.recent(5)
+        if not recent:
+            preview = '工作区索引：尚无记录（点击“刷新上下文索引”或开始语音输入后自动建立）。'
+        else:
+            lines = [f'已索引 {len(recent)} 个最近工作区：']
+            for ws in recent[:4]:
+                branch = f" [{ws['branch']}]" if ws.get('branch') else ''
+                summary = f" — {ws['summary']}" if ws.get('summary') else ''
+                lines.append(f"• {ws['name']} ({ws['stack']}){branch} → {ws['root']}{summary}")
+            preview = '\n'.join(lines)
+        self.query_one('#context-preview', Static).update(preview)
+
+    def _populate_history_table(self, query=''):
+        table = self.query_one('#history-table', DataTable)
+        table.clear()
+        q = (query or '').strip().lower()
+        mode_map = {'command': '命令', 'tools': '工具', 'dictation': '语音'}
+        status_map = {'recording': '录音中', 'processing': '处理中', 'inserted': '已输入', 'copied': '已复制',
+                      'failed': '失败', 'cancelled': '已取消', 'generated': '已生成', 'saved': '已保存',
+                      'executed': '已执行', 'launched': '已请求打开'}
+        for row in self.rows.values():
+            mode_label = mode_map.get(row['mode'], row['mode'])
+            status_label = status_map.get(row['status'], row['status'])
+            if q:
+                haystack = ' '.join([row['raw'], row['result'], row['error'], mode_label, status_label, row['mode'], row['status']]).lower()
+                if q not in haystack:
+                    continue
+            summary = (row['result'] or row['raw'] or row['error']).replace('\n', ' ')[:75]
+            table.add_row(row['created_at'][5:19].replace('T', ' '), mode_label, status_label, Text(summary), key=row['id'])
+
+    def on_input_changed(self, event: Input.Changed):
+        if event.input.id == 'history-search':
+            self._populate_history_table(event.value)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected):
         self.show_history_row(event.row_key.value)
@@ -230,6 +281,15 @@ class VoiceTUI(App):
             result = systemctl(*(['enable', '--now', 'dx-voice'] if name == 'start' else ['disable', '--now', 'dx-voice']))
             self.notify('已完成。' if not result.returncode else '操作失败，请检查服务配置。')
             self.action_refresh()
+        elif name == 'refresh-context':
+            try:
+                cfg = self.collect()
+            except ValueError:
+                cfg = self.values
+            snap = inspect_active_window()
+            self.context_index.refresh(cfg, snap, force_discovery=True)
+            self._update_context_preview()
+            self.notify('工作区上下文索引已刷新。')
         elif name in ('copy-result', 'copy-raw'):
             self.copy((self.selected or {}).get('result' if name == 'copy-result' else 'raw', ''))
         elif name in ('copy-command','copy-tools'):
@@ -253,6 +313,7 @@ class VoiceTUI(App):
 
     def generate(self, request, cfg, mode='command'):
         from .text_tools import TextTools
+        from .modules.context import build_turn_context
         token = uuid.uuid4().hex
         logging = str(cfg.get('history_enabled', 'true')).lower() == 'true'
         tools = TextTools()
@@ -261,15 +322,18 @@ class VoiceTUI(App):
             if logging:
                 self.history.begin(token, mode)
                 self.history.update(token, raw=request, status='processing')
-            if mode=='tools':
+            context_text = ''
+            if str(cfg.get('context_enabled', 'true')).lower() == 'true':
+                context_text = build_turn_context(request, None, self.context_index)
+            if mode == 'tools':
                 from .modules.tools import run
-                outcome = run(tools, request, cfg)
-                processing='tools:'+outcome.action
-                status=outcome.status
+                outcome = run(tools, request, cfg, context_text=context_text, workspaces=self.context_index.recent(10))
+                processing = 'tools:' + outcome.action
+                status = outcome.status
             else:
-                outcome=tools.process('command',request,cfg)
-                processing=outcome.processing
-                status='generated'
+                outcome = tools.process('command', request, cfg, context_text=context_text) if context_text else tools.process('command', request, cfg)
+                processing = outcome.processing
+                status = 'generated'
             result = outcome.text
             if logging:
                 self.history.update(token, result=result, status=status, processing=processing)

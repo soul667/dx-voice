@@ -37,9 +37,9 @@ Main text contrast against panels is at least 5.25:1 in the reviewed roles. Ligh
 
 ## Interaction and motion
 
-1. **Idle → Listening:** hold Win for roughly 400 ms (Ctrl+Win selects command mode). Do not take focus from the current input field.
-2. **Listening:** open microphone only for the active turn. Drive waveform amplitude from actual PCM, and display real incremental transcripts. No decorative loop may masquerade as audio feedback.
-3. **Listening → Finishing:** release Win, drain captured tail frames, then commit the live audio turn. Preserve the preview while awaiting final text.
+1. **Idle → Listening:** hold Ctrl for the configured threshold (or Ctrl+Win / Alt+Win for roughly 0.4s for command or DX action mode). Do not take focus from the current input field.
+2. **Listening:** open microphone only for the active turn. Drive waveform amplitude from actual PCM at ~60 FPS with spring smoothing, and display real incremental transcripts plus active workspace context. No decorative loop may masquerade as audio feedback while listening.
+3. **Listening → Finishing:** release the hold key, drain captured tail frames, then commit the live audio turn. Switch the waveform to a subtle shimmer loop while awaiting final text so processing remains visually responsive.
 4. **Finishing → Success:** paste the final result once; never press Enter. If the active window changed, copy instead and use a copied-result message.
 5. **Error:** retain the recording locally. Retry must be explicit, since it uploads audio again.
 6. **Cancel:** another key or mouse action during a Ctrl-held turn cancels; do not insert stale partial results.
@@ -48,7 +48,7 @@ Motion target: 120–160 ms surface appearance, 80–120 ms amplitude smoothing,
 
 ## Implementation boundary
 
-The v0.2 GTK runtime implements `VoicePill`, `TranscriptCard`, `Waveform`, `Keycap` and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing Win finalizes and inserts text. Settings use Textual widgets in `dx v`; no separate GUI settings window is planned.
+The v0.5 GTK runtime implements `VoicePill`, `TranscriptCard`, smoothed `Waveform`, `Keycap` (`Ctrl`, `Ctrl+Win`, `Alt+Win`) and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing the key finalizes and inserts text. Settings stay in Textual widgets in `dx v`; no separate GUI settings window is planned.
 
 Figma Code Connect does not provide a GTK/Python target, so no Code Connect integration is claimed. The documented component map is the handoff until the production UI is implemented.
 

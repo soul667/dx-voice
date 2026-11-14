@@ -74,3 +74,43 @@ class ModuleTests(unittest.TestCase):
         hold = voice.HoldGesture();hold.update(True, False, 0, tools=True)
         self.assertEqual(hold.update(True, False, .41, tools=True), 'start')
         self.assertEqual(hold.mode, 'tools')
+
+    def test_workspace_status_and_context_inspect_actions(self):
+        inspect_res = tools.execute(
+            tools.Plan(action='context.inspect', argument=''),
+            '查看上下文',
+            context_text='当前工作区: dx-voice',
+        )
+        self.assertEqual(inspect_res.status, 'executed')
+        self.assertIn('当前工作区: dx-voice', inspect_res.text)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / 'dx-voice'
+            project.mkdir()
+            doc = project / 'notes.md'
+            doc.write_text('hello', encoding='utf-8')
+            runner = Mock(return_value=subprocess.CompletedProcess([], 0, '## main...origin/main\n', ''))
+            with patch.object(tools.shutil, 'which', side_effect=lambda cmd: f'/usr/bin/{cmd}' if cmd == 'git' else None):
+                ws_res = tools.execute(
+                    tools.Plan(action='workspace.status', argument='dx-voice'),
+                    '查看 dx-voice 状态',
+                    runner,
+                    workspaces=[{'name': 'dx-voice', 'root': str(project)}],
+                )
+            self.assertEqual(ws_res.status, 'executed')
+            self.assertEqual(runner.call_args.args[0], ['/usr/bin/git', '-C', str(project.resolve()), 'status', '-sb'])
+            self.assertFalse(runner.call_args.kwargs.get('shell', False))
+
+            open_runner = Mock(return_value=subprocess.CompletedProcess([], 0, '', ''))
+            with patch.object(tools.shutil, 'which', side_effect=lambda cmd: '/usr/bin/dx' if cmd == 'dx' else None):
+                open_res = tools.execute(
+                    tools.Plan(action='open.path', argument='dx-voice'),
+                    '打开 dx-voice 目录',
+                    open_runner,
+                    workspaces=[{'name': 'dx-voice', 'root': str(project)}],
+                )
+            self.assertEqual(open_res.status, 'launched')
+            self.assertEqual(
+                open_runner.call_args.args[0],
+                ['dx', 'tools.pickopen', '-a', '__xdgopen__', str(project.resolve())],
+            )

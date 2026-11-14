@@ -1,4 +1,4 @@
-"""Native GTK/Cairo implementation of the DX Voice Figma pill and transcript card."""
+"""Native GTK/Cairo implementation of the DX Voice floating pill and transcript card."""
 from collections import deque
 from functools import lru_cache
 from importlib.resources import files
@@ -87,15 +87,20 @@ class VoiceOverlay:
         self.mode = 'dictation'
         self.message = ''
         self._partial = ''
+        self.context_label = ''
         self.levels = deque([0.0] * 20, maxlen=20)
-        self.level = 0
+        self.bars = [0.0] * 20
+        self.smooth_level = 0.0
+        self.level = 0.0
         self.started = 0
         self.hide_at = 0
         self.frames = None
         self.hover = None
         self.hitboxes = {}
         self.backdrop = None
+        self._backdrop_bytes = None
         self.backdrop_rect = None
+        self.backdrop_dark = False
         self._geometry = None
         self.icons = {}
         for variant in ('light', 'dark'):
@@ -105,6 +110,10 @@ class VoiceOverlay:
                 if not valid or width <= 0 or height <= 0:
                     raise RuntimeError('Invalid packaged Figma SVG: ' + name)
                 self.icons[name, variant] = handle, width, height
+        self._palettes = [
+            {name: color(TOKENS['primitives'][values[idx]]) for name, values in TOKENS['semantic'].items()}
+            for idx in (0, 1)
+        ]
         self.set_theme(theme)
         self._sync_geometry()
 
@@ -125,18 +134,26 @@ class VoiceOverlay:
         self.mode = mode
         self._sync_geometry()
 
+    def set_context_label(self, label):
+        self.context_label = (label or '').strip()[:24]
+        self.canvas.queue_draw()
+
     @property
     def height(self):
         return self.MARGIN * 2 + self.PILL[1] + (self.CARD[1] + self.GAP if self.expanded else 0)
+
+    def _is_dark_surface(self):
+        return self.theme == 'dark' or (self.theme == 'frosted' and self.backdrop_dark)
+
+    def _refresh_colors(self):
+        self.colors = self._palettes[1 if self._is_dark_surface() else 0]
 
     def set_theme(self, theme):
         if theme == 'auto':
             settings = Gtk.Settings.get_default()
             theme = 'dark' if settings and settings.get_property('gtk-application-prefer-dark-theme') else 'light'
         self.theme = theme if theme in ('light', 'dark', 'frosted') else 'light'
-        index = self.theme == 'dark'
-        self.colors = {name: color(TOKENS['primitives'][values[index]])
-                       for name, values in TOKENS['semantic'].items()}
+        self._refresh_colors()
         self.canvas.queue_draw()
 
     def _sync_geometry(self):
@@ -179,6 +196,8 @@ class VoiceOverlay:
         if phase in ('connecting', 'recording') and self.phase not in ('connecting', 'recording'):
             self.started = time.monotonic()
             self.levels = deque([0.0] * 20, maxlen=20)
+            self.bars = [0.0] * 20
+            self.smooth_level = 0.0
         self.phase, self.message = phase, message
         if partial is not None:
             self._partial = partial
@@ -190,19 +209,31 @@ class VoiceOverlay:
         self.window.show_all()
         self._position()
         if self.frames is None:
-            self.frames = GLib.timeout_add(33, self.animate)
+            self.frames = GLib.timeout_add(16, self.animate)
 
     def animate(self):
-        if self.hide_at and time.monotonic() >= self.hide_at:
+        now = time.monotonic()
+        if self.hide_at and now >= self.hide_at:
             self.window.hide()
             self.phase = 'hidden'
             self.backdrop = None
+            self._backdrop_bytes = None
             self.backdrop_rect = None
             self.frames = None
             return False
         if self.phase == 'recording':
-            self.levels.append(self.level)
-            self.level *= .92
+            target = min(1.0, max(0.0, self.level))
+            rate = 0.48 if target > self.smooth_level else 0.16
+            self.smooth_level += (target - self.smooth_level) * rate
+            self.levels.append(self.smooth_level)
+            self.level *= 0.86
+            amp = self.smooth_level ** 0.60
+            for i in range(20):
+                env = math.sin(math.pi * (i + 0.5) / 20) ** 0.72
+                ripple = 0.60 + 0.25 * math.sin(now * 9.5 - i * 0.58) + 0.15 * math.cos(now * 5.7 + i * 0.92)
+                idle_breath = 0.06 * (0.5 + 0.5 * math.sin(now * 3.2 - i * 0.35))
+                bar_target = min(1.0, idle_breath + amp * env * ripple * 1.18)
+                self.bars[i] += (bar_target - self.bars[i]) * 0.42
         self.canvas.queue_draw()
         return True
 
@@ -230,7 +261,8 @@ class VoiceOverlay:
         return layout.get_pixel_size()
 
     def asset(self, cr, name, x, y):
-        handle, width, height = self.icons[name, 'light' if self.theme == 'frosted' else self.theme]
+        variant = 'dark' if self._is_dark_surface() else 'light'
+        handle, width, height = self.icons[name, variant]
         cr.save()
         cr.translate(x, y)
         viewport = Rsvg.Rectangle()
@@ -248,11 +280,17 @@ class VoiceOverlay:
             cr.clip_preserve()
             if self.backdrop:
                 cr.set_source_surface(self.backdrop, 0, self.height - 344)
-                cr.paint_with_alpha(.80)
-            cr.set_source_rgba(1, 1, 1, .64 if self.backdrop else .86)
-            cr.paint()
-            cr.restore()
-            cr.set_source_rgba(1, 1, 1, .62)
+                cr.paint_with_alpha(.78)
+            if self.backdrop_dark:
+                cr.set_source_rgba(22 / 255, 28 / 255, 38 / 255, .58 if self.backdrop else .86)
+                cr.paint()
+                cr.restore()
+                cr.set_source_rgba(1, 1, 1, .16)
+            else:
+                cr.set_source_rgba(1, 1, 1, .58 if self.backdrop else .86)
+                cr.paint()
+                cr.restore()
+                cr.set_source_rgba(1, 1, 1, .65)
         else:
             cr.set_source_rgb(*self.colors['surface/panel'])
             cr.fill_preserve()
@@ -265,30 +303,53 @@ class VoiceOverlay:
         try:
             from .modules.screen import region_image
             x, y, width, height = rectangle
-            image = region_image({'left': x, 'top': y, 'width': width, 'height': height}).filter(ImageFilter.GaussianBlur(16))
-            buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
-            buffer.seek(0)
-            self.backdrop = cairo.ImageSurface.create_from_png(buffer)
+            raw = region_image({'left': x, 'top': y, 'width': width, 'height': height})
+            small = raw.resize((max(1, width // 4), max(1, height // 4)), Image.Resampling.BILINEAR)
+            luma_pixels = small.convert('L').tobytes()
+            self.backdrop_dark = (sum(luma_pixels) / max(1, len(luma_pixels))) < 110
+            blurred = small.filter(ImageFilter.GaussianBlur(4)).resize((width, height), Image.Resampling.BILINEAR)
+            r, g, b = blurred.convert('RGB').split()
+            alpha = Image.new('L', (width, height), 255)
+            self._backdrop_bytes = bytearray(Image.merge('RGBA', (b, g, r, alpha)).tobytes())
+            self.backdrop = cairo.ImageSurface.create_for_data(
+                self._backdrop_bytes, cairo.FORMAT_ARGB32, width, height, width * 4)
+            self._refresh_colors()
         except Exception:
             self.backdrop = None  # Translucent material fallback; never block dictation.
+            self._backdrop_bytes = None
+            self.backdrop_dark = False
+            self._refresh_colors()
 
     def keycap(self, cr, x, y, held):
-        rounded(cr, x + .5, y + .5, 43, 27, TOKENS['metrics']['radius/sm'])
+        label = 'Alt+Win' if self.mode == 'tools' else 'Ctrl+Win' if self.mode == 'command' else 'Ctrl'
+        width = 66 if '+' in label else 43
+        draw_x = x + 43 - width
+        rounded(cr, draw_x + .5, y + .5, width, 27, TOKENS['metrics']['radius/sm'])
         cr.set_source_rgb(*self.colors['accent/soft' if held else 'surface/raised'])
         cr.fill_preserve()
         cr.set_source_rgb(*self.colors['accent/default' if held else 'border/default'])
         cr.set_line_width(1)
         cr.stroke()
-        self.text(cr, 'Ctrl' if self.mode == 'dictation' else 'Win', x, y + 6, 11, 16,
-                  'accent/default' if held else 'text/secondary', 44, latin=True, align=Pango.Alignment.CENTER)
+        self.text(cr, label, draw_x, y + 6, 11, 16,
+                  'accent/default' if held else 'text/secondary', width + 1, latin=True, align=Pango.Alignment.CENTER)
 
     def waveform(self, cr, x, y, busy=False):
-        for i, level in enumerate(self.levels):
-            height = (10 if i % 5 == 0 else 4) if busy else 4 + 24 * min(1, max(0, level)) ** .58
+        now = time.monotonic()
+        start_c = self.colors['status/success' if self.mode == 'tools' else 'wave/start']
+        end_c = self.colors['wave/start' if self.mode == 'tools' else 'accent/default' if self.mode == 'command' else 'wave/end']
+        for i in range(20):
+            t = i / 19.0
+            c = tuple(start_c[k] * (1 - t) + end_c[k] * t for k in range(3))
+            if busy:
+                wave = 0.5 + 0.5 * math.sin(now * 6.8 - i * 0.44)
+                height = 4 + 13 * wave
+                alpha = 0.28 + 0.64 * wave
+            else:
+                val = max(self.bars[i], self.levels[i])
+                height = 4 + 24 * min(1.0, max(0.0, val))
+                alpha = 0.85 + 0.15 * min(1.0, val)
             rounded(cr, x + 2.5 + i * 8, y + (28 - height) / 2, 3, height, 1.5)
-            cr.set_source_rgba(*self.colors['wave/start' if i < 10 else 'wave/end'],
-                               .3 + (i % 5) * .13 if busy else 1)
+            cr.set_source_rgba(*c, alpha)
             cr.fill()
 
     def _pill(self, cr, x, y):
@@ -301,10 +362,11 @@ class VoiceOverlay:
                 cr.fill()
             self.asset(cr, 'close', x + 19, y + 19)
             self.hitboxes['cancel'] = (x + 12, y + 12, 32, 32)
-            self.waveform(cr, x + 56, y + 14)
+            self.waveform(cr, x + 54, y + 14)
             seconds = max(0, int(time.monotonic() - self.started))
-            self.text(cr, f'{seconds // 60}:{seconds % 60:02d}', x + 253, y + 20, 11, 16,
-                      'text/secondary', 31, latin=True, align=Pango.Alignment.RIGHT)
+            timer_right = 266 if self.mode in ('command', 'tools') else 284
+            self.text(cr, f'{seconds // 60}:{seconds % 60:02d}', x + timer_right - 34, y + 20, 11, 16,
+                      'text/secondary', 34, latin=True, align=Pango.Alignment.RIGHT)
             self.keycap(cr, x + 296, y + 14, True)
         elif self.phase == 'processing':
             self.asset(cr, 'mic', x + 12, y + 18)
@@ -329,6 +391,11 @@ class VoiceOverlay:
     def _card(self, cr, x, y):
         self.panel(cr, x, y, *self.CARD, TOKENS['metrics']['radius/lg'])
         state = 'error' if self.phase == 'error' else 'success' if self.phase in ('success', 'action') else 'accent'
+        if self.phase in ('recording', 'processing', 'connecting'):
+            pulse = 0.5 + 0.5 * math.sin(time.monotonic() * 4.5)
+            cr.set_source_rgba(*self.colors['accent/default'], 0.14 + 0.18 * pulse)
+            cr.arc(x + 23, y + 29, 6 + 3 * pulse, 0, math.pi * 2)
+            cr.fill()
         self.asset(cr, 'dot-' + state, x + 20, y + 26)
         title = {'recording': '正在聆听', 'processing': '正在完成', 'success': '输入完成',
                  'error': '连接已断开'}.get(self.phase, '正在连接')
@@ -339,8 +406,10 @@ class VoiceOverlay:
         elif self.mode == 'command' and self.phase in ('recording', 'processing', 'connecting'):
             title = '正在生成命令' if self.phase == 'processing' else '命令模式 · Ctrl + Win'
         elif self.mode == 'tools':
-            title = 'DX Tools 已返回' if self.phase == 'action' else '正在调用 DX Tools' if self.phase == 'processing' else '工具模式 · Alt + Win（实验）'
-        self.text(cr, title, x + 34, y + 20, 12, 18, 'text/secondary', medium=True)
+            title = 'DX Tools 已返回' if self.phase == 'action' else '正在调用 DX Tools' if self.phase == 'processing' else '工具模式 · Alt + Win'
+        if self.context_label and self.phase in ('recording', 'processing', 'connecting'):
+            title += f' · {self.context_label}'
+        self.text(cr, title, x + 34, y + 20, 12, 18, 'text/secondary', 260, medium=True)
         seconds = max(0, int(time.monotonic() - self.started))
         caption = f'{seconds // 60}:{seconds % 60:02d}' if self.phase == 'recording' else 'DX VOICE'
         self.text(cr, caption, x + 300, y + 21, 11, 16, 'text/muted', 80, latin=True, align=Pango.Alignment.RIGHT)
@@ -362,7 +431,7 @@ class VoiceOverlay:
                 hint = '截图不可用，已按纯文本处理'
             if self.mode == 'tools':
                 hint = '松开 Alt + Win 调用已注册动作' if self.phase == 'recording' else '完整结果保存在 dx v 历史'
-            self.text(cr, hint, x + 20, y + 154, 11, 16, 'text/secondary', 300, latin=True)
+            self.text(cr, hint, x + 20, y + 154, 11, 16, 'text/secondary', 290, latin=True)
             self.keycap(cr, x + 336, y + 148, self.phase == 'recording')
 
     def draw(self, _, cr):
@@ -371,10 +440,20 @@ class VoiceOverlay:
         cr.paint()
         cr.set_operator(cairo.OPERATOR_OVER)
         self.hitboxes = {}
+        fade = 1.0
+        if self.hide_at:
+            remaining = self.hide_at - time.monotonic()
+            if 0 <= remaining < 0.18:
+                fade = max(0.0, remaining / 0.18)
+        if fade < 1.0:
+            cr.push_group()
         if self.expanded:
             self._card(cr, (self.WIDTH - self.CARD[0]) / 2, self.MARGIN)
         pill_y = self.MARGIN + (self.CARD[1] + self.GAP if self.expanded else 0)
         self._pill(cr, (self.WIDTH - self.PILL[0]) / 2, pill_y)
+        if fade < 1.0:
+            cr.pop_group_to_source()
+            cr.paint_with_alpha(fade)
         return False
 
     def hit(self, x, y):
@@ -407,4 +486,5 @@ class VoiceOverlay:
             self.frames = None
         self.window.destroy()
         self.backdrop = None
+        self._backdrop_bytes = None
         self.backdrop_rect = None

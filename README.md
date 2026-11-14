@@ -1,8 +1,8 @@
 # DX Voice
 
-**Ctrl → dictate. Ctrl+Win → a shell command. `dx v` → settings and history.**
+**Ctrl → dictate. Ctrl+Win → a shell command. Alt+Win → DX/workspace actions. `dx v` → settings, context & history.**
 
-Streaming voice input for Linux, standalone or as a [Dex](https://github.com/soul667/Dex) plugin. The terminal workspace is assembled from [Textual](https://textual.textualize.io/) widgets and the existing DX theme engine. Models are called through the official OpenAI SDK; local records use SQLite.
+Streaming voice input for Linux, standalone or as a [Dex](https://github.com/soul667/Dex) plugin. The terminal workspace is assembled from [Textual](https://textual.textualize.io/) widgets and the existing DX theme engine. Models are called through the official OpenAI SDK; local records and workspace indexing use SQLite.
 
 [Editable Figma workspace](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110) · [Product/reuse review](docs/product-review.md) · [Component library](design/README.md)
 
@@ -11,16 +11,17 @@ Streaming voice input for Linux, standalone or as a [Dex](https://github.com/sou
 ## What runs
 
 - **Hold Ctrl for the configured threshold:** live dictation. Release to insert the final text into the original input field. No Enter is sent.
-- **Hold Ctrl+Win for about 0.4 seconds:** dictate a command request. Terra returns only a command. It is copied by default, ready for manual paste. The app never runs it.
-- **`dx v`:** terminal Overview, Voice, Rewrite, Command, Tools, History and Connection tabs. All settings are centralized here. The optional TXT file remains the underlying private configuration, not a separate GUI settings page.
-- **Optional light cleanup:** remove verbal fillers/repetition and improve punctuation with a small model. Raw, fast dictation is the default; cleanup can add model latency. Timeouts preserve the original text.
-- **Opt-in screen context:** independently enable screenshot context in Rewrite. At release, only the monitor containing the mouse pointer is captured, resized and sent to the rewrite model. Images stay in RAM and are not recorded in history. Both rewrite and screenshot switches must be on.
-- **Hold Alt+Win for about 0.4 seconds:** experimental registered DX actions: local status queries and opening explicit documents/directories/URLs. Uses existing DX Tools; this executes registered actions, independently of command generation.
-- **Vocabulary and history:** recognition hints for names/technical terms; original/result records and re-copy actions in one local file.
+- **Hold Ctrl+Win for about 0.4 seconds:** dictate a command request (independent of long single-key `hotkey_hold_ms`). Terra returns only a command. It is copied by default, ready for manual paste. The app never runs it.
+- **Hold Alt+Win for about 0.4 seconds:** experimental registered DX & workspace actions: local status queries, indexed workspace Git status (`workspace.status`), context inspection (`context.inspect`), and opening explicit documents/directories/URLs. Executes fixed registered `argv`, independently of command generation.
+- **`dx v`:** terminal Overview (with live workspace context preview and one-click refresh), Voice, Rewrite, Command, Tools, History (with live search filtering), and Connection tabs. All settings stay centralized here; `~/.config/dx-voice/settings.txt` remains the private backing file without a separate GUI settings window.
+- **Lightweight workspace context index:** locally tracks active X11 focus, terminal/editor `cwd` via `/proc`, and project folders via SQLite FTS5 (`~/.local/state/dx-voice/context.db`, mode `0600`). Automatically redacts secrets/tokens and excludes `.env`/key files, injecting workspace vocabulary and active-project hints into realtime ASR (via in-place `session.update` without reconnecting), optional cleanup, command generation, and DX actions—giving accurate domain terminology and homophone recovery without slow screenshots.
+- **Optional light cleanup:** remove verbal fillers/repetition, fix technical/domain homophones using workspace context, and improve punctuation with a small model. Raw, fast dictation is the default; timeouts preserve the original text.
+- **Opt-in screen context:** independently enable screenshot context in Rewrite. At release, capture runs on a background thread so UI/audio commit stays non-blocking; only the monitor containing the mouse pointer is resized and kept in RAM. Both `cleanup_mode` and `rewrite_use_screen` must be enabled.
+- **Vocabulary and history:** prioritized user + workspace recognition hints; original/result records, search filtering, and re-copy actions in one local SQLite file.
 
-Mouse-button/wheel activity and unrelated chords suppress dictation until Ctrl is released. Only action buttons catch mouse input; the rest of the floating HUD lets clicks/scroll through. The GNOME Super overview setting remains available.
+Mouse-button/wheel activity and unrelated chords suppress dictation until Ctrl is released. Passive XI2 key/pointer events wake the hold watcher only while modifiers are active, keeping idle CPU near zero. Only HUD action buttons catch mouse input; the rest lets clicks/scroll through.
 
-The HUD implements the Figma voice pill and transcript card, with light/dark/frosted treatments and original exported SVGs. Terminal colors follow `dx tui.engine` when available; terminal fonts remain controlled by the terminal. No new theme picker is introduced here.
+The HUD runs at ~60 FPS with spring-smoothed symmetric waveform bars, animated `processing` shimmer, dynamic chord keycaps (`Ctrl`, `Ctrl+Win`, `Alt+Win`), adaptive dark/light smoked frosted glass (in-memory Cairo BGRA blur), and original exported SVGs. Terminal colors follow `dx tui.engine` when available; terminal fonts remain controlled by the terminal.
 
 ## Install
 
@@ -69,7 +70,9 @@ Important controls:
 | `command_model` | Defaults to `gpt-6.1-terra` |
 | `command_shell` | Target bash/fish/zsh/sh; defaults to a supported login shell |
 | `command_output` | `clipboard` default, or `paste` into the original field; neither sends Enter |
-| `vocabulary` | Comma-separated recognition hints |
+| `vocabulary` | Comma-separated recognition hints (user entries prioritized ahead of indexed workspace terms) |
+| `context_enabled` | `true` default; local SQLite FTS5 active-window and project context indexer |
+| `context_roots` | Optional comma-separated project directories to index (auto-scans `~/project`, `~/Projects`, etc. when empty) |
 | `history_enabled` | Local history on/off; on by default |
 | `proxy_url` | Proxy used by the user service, if required |
 | `theme` | Floating HUD frosted/light/dark/auto; terminal theme stays with DX |
@@ -84,6 +87,7 @@ Successful audio is deleted; failed audio stays in the private state directory f
 
 ```bash
 dx v status
+dx v context --refresh
 dx v history --path
 dx v history --limit 5
 dx v command 'Find regular files larger than 1 GB under the current directory'
@@ -110,8 +114,8 @@ MIT. Dependencies retain their own licenses.
 
 ## Module boundaries
 
-`modules/asr.py` defines the speech backend factory. OpenAI is the only bundled provider; installed adapters can register the `dx_voice.asr` entry-point group. Qwen is not bundled or verified yet. ASR and text-model connection overrides are independent. `rewrite.py`, `command.py` and `tools.py` own their separate workflows.
+`modules/asr.py` defines the speech backend factory. OpenAI is the only bundled provider; installed adapters can register the `dx_voice.asr` entry-point group. Audio capture prefers `parec` (PulseAudio/PipeWire) with `arecord` raw fallback, and the realtime client maintains a warm WebSocket with a blocking reader thread and in-place `session.update` refreshes. `context.py`, `rewrite.py`, `command.py` and `tools.py` own their separate workflows.
 
-The frosted HUD uses MSS + Pillow to blur a small local background snapshot when it appears, with an alpha tint. It is not continuously refreshed compositor blur. This local visual effect does not upload background pixels; model screenshot context has its own default-off switch.
+The frosted HUD uses MSS + Pillow (downsampled 4× and blurred in-memory via Cairo BGRA pixels) to tint a small local background snapshot with dark/light luminance adaptation when it appears. This local visual effect does not upload background pixels; model screenshot context has its own default-off switch.
 
-`dx v modules`, `dx v asr providers` and `dx v tools list` show supported modules/providers/actions. Arbitrary shell execution, agent dispatch and todo extraction are not implemented.
+`dx v modules`, `dx v asr providers`, `dx v context` and `dx v tools list` show supported modules/providers/context/actions. Arbitrary shell execution, arbitrary agent dispatch and automatic todo execution are not implemented.

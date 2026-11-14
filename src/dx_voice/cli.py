@@ -55,10 +55,12 @@ def doctor():
     except (ImportError, ValueError):
         result['modules']['gi-cairo'] = False
     result['tools'] = {name: bool(shutil.which(name))
-                       for name in ('parec', 'xdotool', 'xclip', 'xprop', 'systemctl', 'xdg-open')}
+                       for name in ('parec', 'arecord', 'xdotool', 'xclip', 'xprop', 'systemctl', 'xdg-open')}
+    result['audio_capture'] = result['tools']['parec'] or result['tools']['arecord']
     result['runtime_ready'] = (result['python_supported'] and result['display_present']
                                and result['session'] == 'x11' and all(result['modules'].values())
-                               and all(result['tools'].values()))
+                               and result['audio_capture']
+                               and all(result['tools'][k] for k in ('xdotool', 'xclip', 'xprop', 'systemctl', 'xdg-open')))
     return result
 
 
@@ -148,6 +150,9 @@ def main(argv=None):
     history.add_argument('--path', action='store_true')
     command = sub.add_parser('command')
     command.add_argument('request', nargs='+')
+    context_cmd = sub.add_parser('context')
+    context_cmd.add_argument('--refresh', action='store_true', help='Re-scan active window and local workspace roots')
+    context_cmd.add_argument('--query', default='', help='Search indexed workspaces with a sample utterance')
     installer = sub.add_parser('setup')
     installer.add_argument('--migrate', action='store_true', help='Migrate and stop the legacy prototype service')
     args = parser.parse_args(argv)
@@ -213,6 +218,30 @@ def main(argv=None):
             from .history import History
             path = app.STATE / 'history.db'
             print(str(path) if args.path else json.dumps(History(path).recent(args.limit), ensure_ascii=False, indent=2))
+            return 0
+        if args.action == 'context':
+            from dataclasses import asdict
+            from .modules.context import ContextIndex, build_turn_context, enrich_asr_settings, inspect_active_window
+            cfg = app.config()
+            index = ContextIndex(app.STATE / 'context.db')
+            snapshot = inspect_active_window()
+            if args.refresh or not index.recent(1):
+                index.refresh(cfg, snapshot, force_discovery=args.refresh)
+            workspaces = index.search(args.query, limit=5) if args.query else index.recent(10)
+            asr_preview = enrich_asr_settings({'prompt': cfg.get('prompt', ''), 'vocabulary': cfg.get('vocabulary', ''),
+                                               'context_enabled': cfg.get('context_enabled', 'true')}, snapshot, index)
+            payload = {
+                'context_enabled': str(cfg.get('context_enabled', 'true')).lower() == 'true',
+                'snapshot': asdict(snapshot),
+                'workspaces': [
+                    {k: ws[k] for k in ('name', 'root', 'stack', 'branch', 'summary')}
+                    for ws in workspaces
+                ],
+                'asr_prompt_preview': asr_preview.get('prompt', ''),
+                'asr_keywords_preview': [w for w in asr_preview.get('vocabulary', '').split(',') if w][:20],
+                'turn_context_preview': build_turn_context(args.query, snapshot, index),
+            }
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
             return 0
         if args.action == 'command':
             import uuid

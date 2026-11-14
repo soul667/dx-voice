@@ -1,5 +1,5 @@
 # DX Voice private settings; primary editor: dx v, save with Ctrl+S.
-# Hold Win to dictate; hold Ctrl+Win for a pure command. Alt+Win runs registered DX actions.
+# Hold Ctrl to dictate; hold Ctrl+Win (~0.4s) for a pure command; hold Alt+Win (~0.4s) for registered DX actions.
 api_key=
 base_url=https://api.openai.com/v1
 proxy_url=
@@ -33,3 +33,5 @@ rewrite_image_detail=low
 tools_enabled=true
 tools_model=gpt-5.4-nano
 tools_timeout_s=20
+context_enabled=true
+context_roots=

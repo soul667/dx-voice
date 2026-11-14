@@ -57,12 +57,12 @@ class TextTools:
             raise RuntimeError('模型未返回可用结果。')
         return response.output_parsed.text.strip()
 
-    def process(self, mode, raw, cfg, image=None):
+    def process(self, mode, raw, cfg, image=None, context_text=''):
         if mode == 'command':
             from .modules.command import generate
-            return generate(self, raw, cfg)
+            return generate(self, raw, cfg, context_text=context_text) if context_text else generate(self, raw, cfg)
         from .modules.rewrite import process
-        return process(self, raw, cfg, image)
+        return process(self, raw, cfg, image, context_text=context_text) if context_text else process(self, raw, cfg, image)
 
     def close(self):
         if self._client:

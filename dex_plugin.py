@@ -9,7 +9,7 @@ import subprocess
 def register_cli(subparsers):
     for name, action in [('voice', 'status'), ('v', 'tui')]:
         parser = subparsers.add_parser(name, help='DX Voice: voice, shell commands and terminal workspace',
-                                      description='Win: dictate. Ctrl+Win: commands. dx v: terminal settings and history.')
+                                      description='Ctrl: dictate. Ctrl+Win: commands. Alt+Win: DX actions. dx v: workspace, context and history.')
         parser.add_argument('voice_args', nargs=argparse.REMAINDER)
         parser.set_defaults(extension_handler=execute, voice_default=action)
 

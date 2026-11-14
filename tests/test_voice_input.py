@@ -177,6 +177,43 @@ class Tests(unittest.TestCase):
         self.assertEqual(hold.mode, 'command')
         self.assertEqual(hold.update(False, False, .6), 'finish')
 
+    def test_chords_use_fast_threshold_even_when_single_ctrl_hold_is_long(self):
+        hold = voice.HoldGesture(threshold=1.2)
+        self.assertIsNone(hold.update(True, False, 0.0))
+        self.assertIsNone(hold.update(True, False, 0.5))
+        self.assertEqual(hold.update(True, False, 1.21), 'start')
+        self.assertEqual(hold.mode, 'dictation')
+        self.assertEqual(hold.update(False, False, 1.3), 'finish')
+
+        hold_cmd = voice.HoldGesture(threshold=1.2)
+        self.assertIsNone(hold_cmd.update(True, False, 0.0, command=True))
+        self.assertEqual(hold_cmd.update(True, False, 0.41, command=True), 'start')
+        self.assertEqual(hold_cmd.mode, 'command')
+
+        hold_tools = voice.HoldGesture(threshold=1.2)
+        self.assertIsNone(hold_tools.update(True, False, 0.0, tools=True))
+        self.assertEqual(hold_tools.update(True, False, 0.41, tools=True), 'start')
+        self.assertEqual(hold_tools.mode, 'tools')
+
+    def test_resolve_modifier_codes_includes_mod1_meta_and_mod4_hyper(self):
+        from Xlib import X, XK
+        rows = [[0] for _ in range(248)]
+        rows[37 - 8] = [XK.string_to_keysym('Control_L')]
+        rows[64 - 8] = [XK.string_to_keysym('Alt_L')]
+        rows[133 - 8] = [XK.string_to_keysym('Super_L')]
+        modmap = [[] for _ in range(8)]
+        modmap[X.ControlMapIndex] = [37]
+        modmap[X.Mod1MapIndex] = [64, 205]
+        modmap[X.Mod4MapIndex] = [133, 207]
+        keyboard = Mock()
+        keyboard.get_keyboard_mapping.return_value = rows
+        keyboard.get_modifier_mapping.return_value = modmap
+        ctrl_codes, super_codes, alt_codes = voice.resolve_modifier_codes(keyboard)
+        self.assertEqual(ctrl_codes, {37})
+        self.assertIn(205, alt_codes)
+        self.assertIn(207, super_codes)
+        self.assertFalse(alt_codes & super_codes)
+
 
 if __name__ == '__main__':
     unittest.main()

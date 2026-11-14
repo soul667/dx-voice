@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import queue
+import shutil
 import signal
 import subprocess
 import threading
@@ -21,11 +22,18 @@ class Capture:
         self.path, self.on_chunk, self.on_done = path, on_chunk, on_done
         self.cancelled = False
         self.bytes = 0
-        command = ['parec', '--raw', '--rate=24000', '--channels=1', '--format=s16le',
-                   '--latency-msec=20', '--process-time-msec=10',
-                   '--client-name=DX Voice', '--stream-name=Voice input']
-        if source:
-            command.append('--device=' + source)
+        if shutil.which('parec'):
+            command = ['parec', '--raw', '--rate=24000', '--channels=1', '--format=s16le',
+                       '--latency-msec=20', '--process-time-msec=10',
+                       '--client-name=DX Voice', '--stream-name=Voice input']
+            if source:
+                command.append('--device=' + source)
+        elif shutil.which('arecord'):
+            command = ['arecord', '-q', '-t', 'raw', '-f', 'S16_LE', '-c', '1', '-r', '24000']
+            if source:
+                command.extend(['-D', source])
+        else:
+            raise OSError('No audio capture utility (parec/arecord) available')
         self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
         self.thread = threading.Thread(target=self._read, daemon=True)
         self.thread.start()
@@ -49,7 +57,7 @@ class Capture:
                         self.bytes += len(data)
                         out.writeframesraw(data)
                         if not self.cancelled:
-                            self.on_chunk(data, min(1.0, audioop.rms(data, 2) / 6500))
+                            self.on_chunk(data, min(1.0, audioop.rms(data, 2) / 5200))
             self.process.wait(timeout=2)
             if self.process.returncode not in (0, -signal.SIGINT):
                 error = '麦克风连接中断。'
@@ -95,13 +103,15 @@ def session_update(cfg):
 
 
 class Realtime:
-    """One warm connection; capture queues audio while a connection is established."""
+    """One warm connection; event-driven reader avoids idle polling and coalesces PCM frames."""
     def __init__(self, callback):
         self.callback = callback
         self.commands = queue.Queue()
         self.stopping = threading.Event()
         self.ready = False
         self.ws = None
+        self._conn_id = 0
+        self._reader = None
         self.current = None
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
@@ -126,17 +136,37 @@ class Realtime:
         self.commands.put(('close', None, None))
 
     @staticmethod
+    def connection_signature(cfg):
+        return tuple(cfg.get(k, '') for k in ('base_url', 'api_key', 'proxy_url', 'realtime_model'))
+
+    @staticmethod
+    def session_signature(cfg):
+        return tuple(cfg.get(k, '') for k in ('realtime_delay', 'prompt', 'vocabulary'))
+
+    @staticmethod
     def signature(cfg):
-        return tuple(cfg.get(k, '') for k in ('base_url', 'api_key', 'proxy_url', 'realtime_model', 'realtime_delay', 'prompt', 'vocabulary'))
+        return Realtime.connection_signature(cfg) + Realtime.session_signature(cfg)
+
+    def _reader_loop(self, ws, conn_id):
+        try:
+            while not self.stopping.is_set():
+                raw = ws.recv()
+                self.commands.put(('server', conn_id, json.loads(raw)))
+        except Exception as exc:
+            self.commands.put(('ws_closed', conn_id, exc))
 
     def _disconnect(self):
         self.ready = False
-        if self.ws:
+        self._conn_id += 1
+        ws, self.ws = self.ws, None
+        reader, self._reader = self._reader, None
+        if ws:
             try:
-                self.ws.close()
+                ws.close()
             except Exception:
                 pass
-        self.ws = None
+        if reader and reader is not threading.current_thread():
+            reader.join(timeout=0.5)
 
     def _connect(self, cfg):
         parsed = urlsplit(cfg['base_url'].rstrip('/'))
@@ -158,35 +188,72 @@ class Realtime:
                 raise RuntimeError('实时语音配置未被 API 接受，请检查实时模型。')
             if event.get('type') == 'session.updated':
                 self.ready = True
+                self._conn_id += 1
+                conn_id = self._conn_id
+                self._reader = threading.Thread(target=self._reader_loop, args=(self.ws, conn_id), daemon=True)
+                self._reader.start()
                 print('realtime=ready', flush=True)
                 return
         raise RuntimeError('实时语音连接超时。')
 
     def _run(self):
         cfg = None
-        signature = None
-        retry_at = 0
+        conn_sig = None
+        sess_sig = None
+        retry_at = 0.0
         item_id = None
         text = ''
         committed_at = None
         while not self.stopping.is_set():
             try:
-                # Process commands before receive; batch adjacent PCM frames into one append.
                 messages = []
+                need_connect = not self.ws and bool(cfg and cfg.get('api_key'))
+                if need_connect and time.monotonic() >= retry_at:
+                    wait_for = 0.0
+                elif need_connect:
+                    wait_for = max(0.05, retry_at - time.monotonic())
+                else:
+                    wait_for = 5.0
                 try:
-                    messages.append(self.commands.get(timeout=.01 if self.ws else .1))
+                    if wait_for > 0:
+                        messages.append(self.commands.get(timeout=wait_for))
+                    else:
+                        messages.append(self.commands.get_nowait())
                     while len(messages) < 80:
                         messages.append(self.commands.get_nowait())
                 except queue.Empty:
                     pass
+
+                audio_buf = bytearray()
+
+                def flush_audio():
+                    if audio_buf and self.ws and self.current:
+                        self.ws.send(json.dumps({
+                            'type': 'input_audio_buffer.append',
+                            'audio': base64.b64encode(bytes(audio_buf)).decode(),
+                        }))
+                    audio_buf.clear()
+
                 for command, token, payload in messages:
+                    if command == 'audio':
+                        if token == self.current:
+                            audio_buf.extend(payload)
+                        continue
+                    flush_audio()
                     if command == 'close':
                         self._disconnect()
                         return
                     if command in ('prepare', 'begin'):
-                        if self.signature(payload) != signature:
+                        new_conn_sig = self.connection_signature(payload)
+                        new_sess_sig = self.session_signature(payload)
+                        if new_conn_sig != conn_sig:
                             self._disconnect()
-                            cfg, signature = payload, self.signature(payload)
+                            cfg, conn_sig, sess_sig = payload, new_conn_sig, new_sess_sig
+                        elif new_sess_sig != sess_sig:
+                            cfg, sess_sig = payload, new_sess_sig
+                            if self.ws:
+                                self.ready = False
+                                self.ws.send(json.dumps(session_update(cfg)))
                         if command == 'begin':
                             self.current = token
                             item_id, text, committed_at = None, '', None
@@ -194,46 +261,48 @@ class Realtime:
                                 self._connect(cfg)
                             self.ws.send(json.dumps({'type': 'input_audio_buffer.clear'}))
                             self.callback('connected', token, None)
-                    elif command == 'audio' and token == self.current:
-                        self.ws.send(json.dumps({'type': 'input_audio_buffer.append',
-                                                'audio': base64.b64encode(payload).decode()}))
                     elif command == 'commit' and token == self.current:
                         committed_at = time.monotonic()
                         self.ws.send(json.dumps({'type': 'input_audio_buffer.commit'}))
                     elif command == 'cancel' and token == self.current:
                         self.current = None
                         self._disconnect()  # cancel late server events as well as buffered audio
-                        retry_at = 0
+                        retry_at = 0.0
+                    elif command == 'ws_closed':
+                        if token == self._conn_id:
+                            raise RuntimeError('实时语音网络连接中断，录音已保留。')
+                    elif command == 'server':
+                        if token != self._conn_id:
+                            continue
+                        event = payload
+                        kind = event.get('type', '')
+                        if kind == 'session.updated':
+                            self.ready = True
+                            continue
+                        if kind == 'error':
+                            raise RuntimeError('实时语音服务返回错误，请检查模型、余额或网络。')
+                        if not self.current:
+                            continue
+                        if kind == 'input_audio_buffer.committed':
+                            item_id = event.get('item_id')
+                        elif kind == 'conversation.item.input_audio_transcription.delta':
+                            if item_id and event.get('item_id') != item_id:
+                                continue
+                            item_id = event.get('item_id') or item_id
+                            text += event.get('delta', '')
+                            self.callback('partial', self.current, text)
+                        elif kind == 'conversation.item.input_audio_transcription.completed':
+                            if not committed_at or (item_id and event.get('item_id') != item_id):
+                                continue
+                            final = event.get('transcript', '').strip()
+                            latency = time.monotonic() - committed_at
+                            self.callback('final', self.current, (final, latency))
+                            self.current = None
+                        elif kind == 'conversation.item.input_audio_transcription.failed':
+                            raise RuntimeError('实时识别未完成，录音已保留。')
+                flush_audio()
                 if not self.ws and cfg and cfg.get('api_key') and time.monotonic() >= retry_at:
                     self._connect(cfg)
-                if not self.ws:
-                    continue
-                try:
-                    event = json.loads(self.ws.recv(timeout=.005))
-                except TimeoutError:
-                    continue
-                kind = event.get('type', '')
-                if kind == 'error':
-                    raise RuntimeError('实时语音服务返回错误，请检查模型、余额或网络。')
-                if not self.current:
-                    continue
-                if kind == 'input_audio_buffer.committed':
-                    item_id = event.get('item_id')
-                elif kind == 'conversation.item.input_audio_transcription.delta':
-                    if item_id and event.get('item_id') != item_id:
-                        continue
-                    item_id = event.get('item_id') or item_id
-                    text += event.get('delta', '')
-                    self.callback('partial', self.current, text)
-                elif kind == 'conversation.item.input_audio_transcription.completed':
-                    if not committed_at or (item_id and event.get('item_id') != item_id):
-                        continue
-                    final = event.get('transcript', '').strip()
-                    latency = time.monotonic() - committed_at
-                    self.callback('final', self.current, (final, latency))
-                    self.current = None
-                elif kind == 'conversation.item.input_audio_transcription.failed':
-                    raise RuntimeError('实时识别未完成，录音已保留。')
             except Exception as exc:
                 token, self.current = self.current, None
                 self._disconnect()

@@ -88,6 +88,19 @@ class RealtimeTests(unittest.TestCase):
         self.client.commit('new')
         self.assertEqual(self.event('final', 'new')[0], '实时文字。')
 
+    def test_dynamic_prompt_updates_session_without_reconnecting(self):
+        cfg1 = dict(self.cfg, prompt='Prompt A', vocabulary='Foo')
+        cfg2 = dict(self.cfg, prompt='Prompt B', vocabulary='Bar')
+        for token, cfg in (('one', cfg1), ('two', cfg2)):
+            self.client.begin(token, cfg)
+            self.client.append(token, b'\0' * 4800)
+            self.client.append(token, b'\0' * 4800)
+            self.assertEqual(self.event('partial', token), '实时文字')
+            self.client.commit(token)
+            self.assertEqual(self.event('final', token)[0], '实时文字。')
+        self.assertEqual(self.connections, 1)
+        self.assertGreaterEqual(self.commands.count('session.update'), 2)
+
 
 if __name__ == '__main__':
     unittest.main()

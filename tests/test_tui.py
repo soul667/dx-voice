@@ -2,8 +2,9 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
-from textual.widgets import Input, Select, TabbedContent, TextArea, Button
+from textual.widgets import Input, Select, TabbedContent, TextArea, Button, DataTable
 from dx_voice import app as voice
+from dx_voice.history import History
 from dx_voice.tui import VoiceTUI, SPEECH, COMMAND, CONNECTION, REWRITE, TOOLS
 
 
@@ -51,3 +52,25 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(app.query_one('#command-result', TextArea).text, 'pwd')
                     self.assertFalse(app.query_one('#copy-command', Button).disabled)
                     self.assertEqual(app.history.recent()[0]['result'], 'pwd')
+
+    async def test_history_search_filters_rows_without_deleting_records(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = Path(tmp) / 'history.db'
+            history = History(history_path)
+            history.begin('t1', 'dictation')
+            history.update('t1', raw='语音输入测试', result='语音输入测试', status='inserted')
+            history.begin('t2', 'command')
+            history.update('t2', raw='查看容器', result='docker ps', status='copied')
+
+            app = VoiceTUI(settings={}, history_path=history_path, palette={})
+            async with app.run_test(size=(120, 40)) as pilot:
+                table = app.query_one('#history-table', DataTable)
+                self.assertEqual(table.row_count, 2)
+                search = app.query_one('#history-search', Input)
+                search.value = 'docker'
+                await pilot.pause()
+                self.assertEqual(table.row_count, 1)
+                search.value = ''
+                await pilot.pause()
+                self.assertEqual(table.row_count, 2)
+                self.assertEqual(len(history.recent(10)), 2)
