@@ -155,6 +155,20 @@ class OverlayTests(unittest.TestCase):
                     image = self.render()
                     self.assertGreater(image.getbbox()[2], 350)
 
+    def test_rotating_gradient_ring_animates_around_capsule_perimeter(self):
+        h = self.overlay
+        h.set_theme('dark')
+        h.set_mode('dictation')
+        h.show('recording', partial='')
+        h.ring_angle = 0.0
+        img_a = self.render()
+        h.ring_angle = 2.4
+        img_b = self.render()
+        # Top capsule border pixel (x=260, y=226) shifts color as the conic gradient orbits.
+        self.assertNotEqual(img_a.getpixel((260, 226)), img_b.getpixel((260, 226)))
+        # Interior capsule surface remains clean.
+        self.assertEqual(img_a.getpixel((320, 278))[:3], (15, 20, 30))
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -117,10 +117,13 @@ class VoiceOverlay:
         self.bars = [0.0] * 24
         self.smooth_level = 0.0
         self.level = 0.0
+        self.ring_angle = 0.65
+        self.wave_phase = 0.0
         self.started = 0.0
         self.phase_at = 0.0
         self.hide_at = 0.0
         self._last_tick = time.monotonic()
+        self._conic_cache = {}
 
         self.w_spring = Spring(self.COMPACT_W, stiffness=300.0, damping=26.0)
         self.h_spring = Spring(self.COMPACT_H, stiffness=290.0, damping=25.0)
@@ -432,6 +435,21 @@ class VoiceOverlay:
                 idle_breath = 0.055 * (0.5 + 0.5 * math.sin(now * 3.1 - i * 0.34))
                 bar_target = min(1.0, idle_breath + amp * env * ripple * 1.22)
                 self.bars[i] += (bar_target - self.bars[i]) * 0.44
+        else:
+            self.smooth_level *= 0.88
+
+        if self.phase == 'processing':
+            omega = 4.8
+        elif self.phase == 'connecting':
+            omega = 3.2
+        elif self.phase == 'recording':
+            omega = 2.35 + 1.85 * (self.smooth_level ** 0.65)
+        elif self.phase == 'arming':
+            omega = 2.8 + 1.4 * self.arm_progress
+        else:
+            omega = 1.8
+        self.ring_angle = (self.ring_angle + omega * dt) % (math.pi * 2.0)
+        self.wave_phase = (self.wave_phase + (3.4 + 2.2 * self.smooth_level) * dt) % (math.pi * 2.0)
 
         self.canvas.queue_draw()
         return True
@@ -483,8 +501,173 @@ class VoiceOverlay:
             cr.set_source_rgba(5 / 255, 9 / 255, 18 / 255, base_alpha * mult)
             cr.fill()
 
+    def _orbit_stops(self, dark):
+        if self.phase in ('success', 'action'):
+            return [
+                (0.00, *(color('#D1FAE5') if dark else color('#10B981')), 0.98),
+                (0.22, *(color('#34D399') if dark else color('#059669')), 0.90),
+                (0.50, *(color('#2DD4BF') if dark else color('#0D9488')), 0.44),
+                (0.78, *(color('#38BDF8') if dark else color('#0284C7')), 0.18),
+            ]
+        if self.mode == 'command':
+            return [
+                (0.00, *(color('#FEF08A') if dark else color('#F59E0B')), 1.00),
+                (0.14, *(color('#FBBF24') if dark else color('#D97706')), 0.98),
+                (0.32, *(color('#F97316') if dark else color('#EA580C')), 0.92),
+                (0.50, *(color('#FB7185') if dark else color('#E11D48')), 0.84),
+                (0.68, *(color('#D97706') if dark else color('#B45309')), 0.26),
+                (0.85, *(color('#FACC15') if dark else color('#F59E0B')), 0.82),
+            ]
+        if self.mode == 'tools':
+            return [
+                (0.00, *(color('#D1FAE5') if dark else color('#10B981')), 1.00),
+                (0.15, *(color('#34D399') if dark else color('#059669')), 0.98),
+                (0.34, *(color('#14B8A6') if dark else color('#0D9488')), 0.92),
+                (0.52, *(color('#22D3EE') if dark else color('#0891B2')), 0.84),
+                (0.69, *(color('#059669') if dark else color('#047857')), 0.26),
+                (0.86, *(color('#6EE7B7') if dark else color('#10B981')), 0.82),
+            ]
+        return [
+            (0.00, *(color('#E0F2FE') if dark else color('#0EA5E9')), 1.00),
+            (0.13, *(color('#38BDF8') if dark else color('#0284C7')), 0.98),
+            (0.30, *(color('#6366F1') if dark else color('#4F46E5')), 0.94),
+            (0.47, *(color('#A855F7') if dark else color('#7C3AED')), 0.88),
+            (0.64, *(color('#3B82F6') if dark else color('#2563EB')), 0.26),
+            (0.80, *(color('#2DD4BF') if dark else color('#0D9488')), 0.74),
+            (0.91, *(color('#22D3EE') if dark else color('#06B6D4')), 0.92),
+        ]
+
+    @staticmethod
+    def _sample_orbit_stop(stops, pos):
+        t = pos % 1.0
+        n = len(stops)
+        for i in range(n):
+            t0, r0, g0, b0, a0 = stops[i]
+            t1, r1, g1, b1, a1 = stops[(i + 1) % n]
+            span_end = t1 if i + 1 < n else 1.0
+            if t0 <= t <= span_end:
+                span = max(1e-6, span_end - t0)
+                u = 0.5 - 0.5 * math.cos(math.pi * ((t - t0) / span))
+                return (
+                    r0 + (r1 - r0) * u,
+                    g0 + (g1 - g0) * u,
+                    b0 + (b1 - b0) * u,
+                    a0 + (a1 - a0) * u,
+                )
+        _, r0, g0, b0, a0 = stops[0]
+        return r0, g0, b0, a0
+
+    def _conic_pattern(self, dark, alpha_scale):
+        bucket = max(0.02, min(1.0, round(alpha_scale * 25.0) / 25.0))
+        variant = 'ok' if self.phase in ('success', 'action') else self.mode
+        key = (variant, bool(dark), bucket)
+        cached = self._conic_cache.get(key)
+        if cached is not None:
+            return cached
+        if len(self._conic_cache) > 72:
+            self._conic_cache.clear()
+        stops = self._orbit_stops(dark)
+        sectors = 28
+        r_in, r_out = 0.06, 3.4
+        mp = cairo.MeshPattern()
+        samples = [self._sample_orbit_stop(stops, i / float(sectors)) for i in range(sectors)]
+        for i in range(sectors):
+            a0 = (2.0 * math.pi * i) / sectors
+            a1 = (2.0 * math.pi * (i + 1)) / sectors
+            c0 = samples[i]
+            c1 = samples[(i + 1) % sectors]
+            ca0, sa0 = math.cos(a0), math.sin(a0)
+            ca1, sa1 = math.cos(a1), math.sin(a1)
+            mp.begin_patch()
+            mp.move_to(ca0 * r_in, sa0 * r_in)
+            mp.line_to(ca0 * r_out, sa0 * r_out)
+            mp.line_to(ca1 * r_out, sa1 * r_out)
+            mp.line_to(ca1 * r_in, sa1 * r_in)
+            mp.set_corner_color_rgba(0, c0[0], c0[1], c0[2], c0[3] * bucket)
+            mp.set_corner_color_rgba(1, c0[0], c0[1], c0[2], c0[3] * bucket)
+            mp.set_corner_color_rgba(2, c1[0], c1[1], c1[2], c1[3] * bucket)
+            mp.set_corner_color_rgba(3, c1[0], c1[1], c1[2], c1[3] * bucket)
+            mp.end_patch()
+        self._conic_cache[key] = mp
+        return mp
+
+    def _set_conic_source(self, cr, cx, cy, rx, ry, angle, dark, alpha_scale=1.0):
+        pattern = self._conic_pattern(dark, alpha_scale)
+        c = math.cos(angle)
+        s = -math.sin(angle)
+        rx = max(6.0, float(rx))
+        ry = max(6.0, float(ry))
+        xx, xy = c / rx, -s / ry
+        yx, yy = s / rx, c / ry
+        pattern.set_matrix(cairo.Matrix(xx, yx, xy, yy, -xx * cx - xy * cy, -yx * cx - yy * cy))
+        cr.set_source(pattern)
+
+    def _draw_orbit_ring(self, cr, x, y, width, height, radius, dark):
+        """Render a 360-degree rotating multi-stop gradient ring + exterior aurora bloom."""
+        active_input = self.phase in ('arming', 'connecting', 'recording', 'processing')
+        celebration = 0.0
+        if self.phase in ('success', 'action'):
+            elapsed = max(0.0, time.monotonic() - self.phase_at)
+            if elapsed < 0.55:
+                celebration = 1.0 - (elapsed / 0.55)
+        if not active_input and celebration <= 0.0:
+            return
+
+        cx, cy = x + width / 2.0, y + height / 2.0
+        rx, ry = width * 0.52, height * 0.52
+        voice_boost = min(1.0, self.smooth_level ** 0.65) if self.phase == 'recording' else (0.35 if self.phase == 'processing' else 0.12)
+        intensity = (
+            (0.55 + 0.45 * self.arm_progress) if self.phase == 'arming'
+            else celebration if celebration > 0.0
+            else 1.0
+        )
+
+        # Pass A: Exterior-only seamless Gaussian bloom (centered on the border so inner half clips cleanly
+        # and outer half stacks with smooth inverse-square falloff and zero double-ring banding).
+        cr.save()
+        cr.set_fill_rule(cairo.FillRule.EVEN_ODD)
+        cr.rectangle(0.0, 0.0, float(self.WIDTH), float(self.STAGE_HEIGHT))
+        rounded(cr, x + 0.5, y + 0.5, width - 1.0, height - 1.0, radius)
+        cr.clip()
+
+        halo_base = (0.40 if dark else 0.28) * intensity
+        spread = 1.0 + 0.45 * voice_boost
+        for lw, mult in (
+            (28.0 * spread, 0.045),
+            (20.0 * spread, 0.095),
+            (13.5 * spread, 0.175),
+            (8.5 * spread, 0.300),
+            (4.8 * spread, 0.480),
+            (2.6 * spread, 0.720),
+        ):
+            self._set_conic_source(cr, cx, cy, rx, ry, self.ring_angle, dark, halo_base * mult)
+            rounded(cr, x + 0.35, y + 0.35, width - 0.7, height - 0.7, max(2.0, radius - 0.2))
+            cr.set_line_width(lw)
+            cr.stroke()
+        cr.restore()
+
+        # Pass B: Crisp rotating multi-color gradient border hugging the capsule perimeter.
+        rim_alpha = (0.98 if dark else 0.94) * intensity
+        self._set_conic_source(cr, cx, cy, rx, ry, self.ring_angle, dark, rim_alpha)
+        rounded(cr, x + 0.35, y + 0.35, width - 0.7, height - 0.7, max(2.0, radius - 0.2))
+        cr.set_line_width((2.35 if dark else 2.5) + 0.55 * voice_boost)
+        cr.stroke()
+
+        # Pass C: Specular leading comet glint riding the crest of the rotating gradient.
+        crest_x = cx + (width * 0.5) * math.cos(self.ring_angle)
+        crest_y = cy + (height * 0.5) * math.sin(self.ring_angle)
+        glint_r = max(38.0, min(86.0, width * 0.18))
+        glint = cairo.RadialGradient(crest_x, crest_y, 1.0, crest_x, crest_y, glint_r)
+        glint.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, (0.82 if dark else 0.68) * intensity)
+        glint.add_color_stop_rgba(0.45, 1.0, 1.0, 1.0, (0.26 if dark else 0.18) * intensity)
+        glint.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0)
+        rounded(cr, x + 0.35, y + 0.35, width - 0.7, height - 0.7, max(2.0, radius - 0.2))
+        cr.set_source(glint)
+        cr.set_line_width(1.6 + 0.4 * voice_boost)
+        cr.stroke()
+
     def panel(self, cr, x, y, width, height, radius):
-        """Render the 5-layer optical Carbon Fluid Glass capsule surface."""
+        """Render the optical Carbon Fluid Glass capsule surface + rotating gradient aura."""
         # Layer 1: zero-allocation multi-layer ambient + umbra shadow.
         self._draw_capsule_shadow(cr, x, y, width, height, radius)
 
@@ -511,11 +694,16 @@ class VoiceOverlay:
         # Layer 3: localized ambient voice aura near the left status badge (kept clear of center).
         if self.phase in ('arming', 'connecting', 'recording', 'processing', 'error', 'success', 'action'):
             glow_alpha = (
-                (0.12 + 0.10 * self.smooth_level) if dark else (0.07 + 0.06 * self.smooth_level)
+                (0.13 + 0.12 * self.smooth_level) if dark else (0.07 + 0.07 * self.smooth_level)
             )
-            glow = cairo.RadialGradient(x + 48.0, y + 26.0, 2.0, x + 48.0, y + 26.0, 148.0)
+            orbit_dx = 10.0 * math.cos(self.ring_angle)
+            orbit_dy = 6.0 * math.sin(self.ring_angle)
+            glow = cairo.RadialGradient(
+                x + 48.0 + orbit_dx, y + 26.0 + orbit_dy, 2.0,
+                x + 48.0, y + 26.0, 148.0,
+            )
             glow.add_color_stop_rgba(0.0, *start_c, glow_alpha)
-            glow.add_color_stop_rgba(0.65, *end_c, glow_alpha * 0.28)
+            glow.add_color_stop_rgba(0.65, *end_c, glow_alpha * 0.30)
             glow.add_color_stop_rgba(1.0, *end_c, 0.0)
             cr.set_source(glow)
             cr.paint()
@@ -554,22 +742,8 @@ class VoiceOverlay:
             cr.set_line_width(1.0)
             cr.stroke()
 
-        # Layer 5: processing perimeter light beam sweeping smoothly around the capsule.
-        if self.phase == 'processing':
-            angle = time.monotonic() * 3.2
-            cx, cy = x + width / 2.0, y + height / 2.0
-            rx, ry = width * 0.65, height * 0.9
-            dx, dy = math.cos(angle) * rx, math.sin(angle) * ry
-            beam = cairo.LinearGradient(cx - dx, cy - dy, cx + dx, cy + dy)
-            beam.add_color_stop_rgba(0.0, *start_c, 0.02)
-            beam.add_color_stop_rgba(0.48, *start_c, 0.08)
-            beam.add_color_stop_rgba(0.75, *end_c, 0.72)
-            beam.add_color_stop_rgba(0.92, *start_c, 0.92)
-            beam.add_color_stop_rgba(1.0, *start_c, 0.06)
-            rounded(cr, x + 0.75, y + 0.75, width - 1.5, height - 1.5, max(2.0, radius - 0.5))
-            cr.set_source(beam)
-            cr.set_line_width(1.6)
-            cr.stroke()
+        # Layer 5: 360-degree rotating gradient ring + audio-reactive outer bloom during input.
+        self._draw_orbit_ring(cr, x, y, width, height, radius, dark)
 
     def _capture_backdrop(self, rectangle):
         self.backdrop_rect = rectangle
@@ -638,24 +812,30 @@ class VoiceOverlay:
     def waveform(self, cr, x, y, count=24, pitch=6.5, max_h=28.0, busy=False):
         now = time.monotonic()
         start_c, end_c = self._mode_accents()
+        dark = self._is_dark_surface()
+        stops = self._orbit_stops(dark)
         for i in range(count):
             t = i / max(1.0, float(count - 1))
-            c = tuple(start_c[k] * (1.0 - t) + end_c[k] * t for k in range(3))
+            flow_pos = (t * 0.65 - self.wave_phase / (math.pi * 2.0)) % 1.0
+            sr, sg, sb, _ = self._sample_orbit_stop(stops, flow_pos)
+            base_c = tuple(start_c[k] * (1.0 - t) + end_c[k] * t for k in range(3))
+            c = tuple(base_c[k] * 0.42 + (sr, sg, sb)[k] * 0.58 for k in range(3))
             if busy:
                 travel = 0.5 + 0.5 * math.sin(now * 6.8 - i * 0.42)
                 mod = 0.7 + 0.3 * math.cos(now * 2.5 + i * 0.18)
-                h = 4.0 + (max_h * 0.52) * travel * mod
-                alpha = 0.28 + 0.68 * travel
+                h = 4.0 + (max_h * 0.56) * travel * mod
+                alpha = 0.34 + 0.64 * travel
             else:
                 idx = min(len(self.bars) - 1, int(round(i * (len(self.bars) - 1) / max(1, count - 1))))
                 val = min(1.0, max(0.0, max(self.bars[idx], self.levels[idx])))
-                h = 4.0 + (max_h - 4.0) * val
-                alpha = 0.82 + 0.18 * val
+                shimmer = 0.035 * (0.5 + 0.5 * math.sin(self.wave_phase * 1.4 - i * 0.38))
+                h = 4.0 + (max_h - 4.0) * min(1.0, val + shimmer)
+                alpha = 0.84 + 0.16 * val
             bx = x + i * pitch
             by = y + (max_h - h) / 2.0
-            if not busy and h > 11.0:
+            if not busy and h > 10.0:
                 rounded(cr, bx - 1.0, by - 1.5, 5.0, h + 3.0, 2.5)
-                cr.set_source_rgba(*c, 0.16)
+                cr.set_source_rgba(*c, 0.20)
                 cr.fill()
             rounded(cr, bx, by, 3.0, h, 1.5)
             cr.set_source_rgba(*c, alpha)
@@ -663,6 +843,8 @@ class VoiceOverlay:
 
     def _draw_cancel_button(self, cr, x, y, size=34.0):
         hovered = self.hover == 'cancel'
+        dark = self._is_dark_surface()
+        cx, cy = x + size / 2.0, y + size / 2.0
         rounded(cr, x, y, size, size, size / 2.0)
         if hovered:
             cr.set_source_rgba(*self.colors['surface/raised'], 0.95)
@@ -673,7 +855,18 @@ class VoiceOverlay:
         else:
             cr.set_source_rgba(*self.colors['surface/raised'], 0.55)
             cr.fill()
-        cx, cy = x + size / 2.0, y + size / 2.0
+
+        if self.phase in ('recording', 'connecting', 'processing'):
+            ring_r = size / 2.0 + 0.6
+            self._set_conic_source(
+                cr, cx, cy, ring_r, ring_r,
+                -self.ring_angle * 1.35, dark,
+                0.78 if hovered else (0.52 + 0.32 * min(1.0, self.smooth_level)),
+            )
+            cr.arc(cx, cy, ring_r, 0.0, math.pi * 2.0)
+            cr.set_line_width(1.45)
+            cr.stroke()
+
         cr.set_source_rgba(*self.colors['text/secondary'], 0.95 if hovered else 0.78)
         cr.set_line_width(1.7)
         cr.set_line_cap(cairo.LINE_CAP_ROUND)
@@ -687,11 +880,16 @@ class VoiceOverlay:
 
     def _draw_mic_badge(self, cr, cx, cy, pulse=False):
         start_c, _ = self._mode_accents()
+        dark = self._is_dark_surface()
         if pulse:
             p = 0.5 + 0.5 * math.sin(time.monotonic() * 4.8)
             cr.set_source_rgba(*start_c, 0.12 + 0.12 * p)
             cr.arc(cx, cy, 13.0 + 3.0 * p, 0, math.pi * 2)
             cr.fill()
+            self._set_conic_source(cr, cx, cy, 14.5, 14.5, self.ring_angle * 1.4, dark, 0.85)
+            cr.arc(cx, cy, 14.2, 0.0, math.pi * 2.0)
+            cr.set_line_width(1.5)
+            cr.stroke()
         cr.set_source_rgba(*start_c, 0.14)
         cr.arc(cx, cy, 13.0, 0, math.pi * 2)
         cr.fill()
@@ -859,6 +1057,15 @@ class VoiceOverlay:
             caret_y = body_y + pos.y / Pango.SCALE + 4.0
             caret_h = max(14.0, min(19.0, pos.height / Pango.SCALE - 7.0))
             blink = 0.42 + 0.58 * (0.5 + 0.5 * math.sin(now * 6.0))
+            caret_glow = cairo.RadialGradient(
+                caret_x + 1.25, caret_y + caret_h / 2.0, 1.0,
+                caret_x + 1.25, caret_y + caret_h / 2.0, 10.0,
+            )
+            caret_glow.add_color_stop_rgba(0.0, *start_c, 0.34 * blink)
+            caret_glow.add_color_stop_rgba(1.0, *start_c, 0.0)
+            cr.set_source(caret_glow)
+            cr.arc(caret_x + 1.25, caret_y + caret_h / 2.0, 10.0, 0.0, math.pi * 2.0)
+            cr.fill()
             rounded(cr, caret_x, caret_y, 2.5, caret_h, 1.25)
             cr.set_source_rgba(*start_c, blink)
             cr.fill()
