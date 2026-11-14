@@ -177,6 +177,17 @@ class Tests(unittest.TestCase):
         self.assertEqual(hold.mode, 'command')
         self.assertEqual(hold.update(False, False, .6), 'finish')
 
+    def test_short_ctrl_threshold_upgrades_to_command_when_win_pressed_slightly_later(self):
+        hold = voice.HoldGesture(threshold=0.2)
+        self.assertIsNone(hold.update(True, False, 0.0))
+        self.assertEqual(hold.update(True, False, 0.21), 'start')
+        self.assertEqual(hold.mode, 'dictation')
+        self.assertEqual(hold.update(True, False, 0.35, command=True), 'upgrade')
+        self.assertEqual(hold.mode, 'command')
+        self.assertIsNone(hold.update(True, False, 0.6, command=False))
+        self.assertEqual(hold.mode, 'command')
+        self.assertEqual(hold.update(False, False, 0.8), 'finish')
+
     def test_chords_use_fast_threshold_even_when_single_ctrl_hold_is_long(self):
         hold = voice.HoldGesture(threshold=1.2)
         self.assertIsNone(hold.update(True, False, 0.0))

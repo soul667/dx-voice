@@ -185,11 +185,13 @@ class HoldGesture:
         self.chord_threshold = chord_threshold
         self.mode = 'dictation'
         self.since = None
+        self.started_at = None
         self.active = False
         self.suppressed = False
 
     def block(self):
         self.active = False
+        self.started_at = None
         self.suppressed = True
 
     def needed_threshold(self):
@@ -203,13 +205,18 @@ class HoldGesture:
             if ctrl:
                 self.block()
             else:
-                self.since, self.active, self.suppressed = None, False, False
+                self.since, self.started_at, self.active, self.suppressed = None, None, False, False
             return action
         if not ctrl:
             action = 'finish' if self.active else None
-            self.since, self.active, self.suppressed = None, False, False
+            self.since, self.started_at, self.active, self.suppressed = None, None, False, False
             return action
-        if self.suppressed or self.active:
+        if self.suppressed:
+            return None
+        if self.active:
+            if self.mode == 'dictation' and command and self.started_at is not None and now - self.started_at <= 1.2:
+                self.mode = 'command'
+                return 'upgrade'
             return None
         desired = 'tools' if tools else 'command' if command else 'dictation'
         if desired != self.mode:
@@ -219,6 +226,7 @@ class HoldGesture:
             self.since = now
         if now - self.since >= self.needed_threshold():
             self.active = True
+            self.started_at = now
             return 'start'
         return None
 
@@ -394,6 +402,11 @@ class App:
                     notify('模块配置有误，请在 dx v 中检查语音后端与连接。')
             else:
                 self.hold.block()
+        elif action == 'upgrade' and self.phase == 'recording':
+            print('hotkey_hold=upgrade mode=' + self.hold.mode, flush=True)
+            self.mode = self.hold.mode
+            self.overlay.set_mode(self.mode)
+            self.overlay.show('recording' if self.audio_ready else 'connecting', partial=self.overlay.partial)
         elif action == 'finish' and self.phase == 'recording':
             print('hotkey_hold=release', flush=True)
             self.finish()
