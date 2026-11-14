@@ -21,7 +21,7 @@ Streaming voice input for Linux, standalone or as a [Dex](https://github.com/sou
 
 Mouse-button/wheel activity and unrelated chords suppress dictation until Ctrl is released. Passive XI2 key/pointer events wake the hold watcher only while modifiers are active, keeping idle CPU near zero. Only HUD action buttons catch mouse input; the rest lets clicks/scroll through.
 
-The HUD runs at ~60 FPS with spring-smoothed symmetric waveform bars, animated `processing` shimmer, dynamic chord keycaps (`Ctrl`, `Ctrl+Win`, `Alt+Win`), adaptive dark/light smoked frosted glass (in-memory Cairo BGRA blur), and original exported SVGs. Terminal colors follow `dx tui.engine` when available; terminal fonts remain controlled by the terminal.
+The HUD (**Carbon Fluid Glass**, `v0.6.0`) renders inside a fixed transparent X11 stage (`520×320`) as a single spring-morphing capsule at 60 FPS: an optional pre-hold charge pill (`arming`), compact active strip (`396×60`), and content-adaptive expanded card (`452×136..190`) with 24-bar harmonic waveforms, animated processing perimeter light beam, streaming text caret, animated checkmark stroke, tactile 3D keycaps (`Ctrl`, `Ctrl+Win`, `Alt+Win`), context chip, and luminance-adaptive smoked frosted glass. Terminal colors follow `dx tui.engine` with a card-based Overview dashboard, grouped settings sections, live HUD preview trigger, and master-detail History search.
 
 ## Install
 

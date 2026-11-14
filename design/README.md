@@ -48,7 +48,7 @@ Motion target: 120–160 ms surface appearance, 80–120 ms amplitude smoothing,
 
 ## Implementation boundary
 
-The v0.5 GTK runtime implements `VoicePill`, `TranscriptCard`, smoothed `Waveform`, `Keycap` (`Ctrl`, `Ctrl+Win`, `Alt+Win`) and the cancel/retry actions in `VoiceOverlay`. It uses packaged semantic tokens, Inter/Noto Sans SC typography, and the original exported light/dark SVG assets. Live text expands the card above the pill; releasing the key finalizes and inserts text. Settings stay in Textual widgets in `dx v`; no separate GUI settings window is planned.
+The v0.6 GTK runtime implements a monolithic Carbon Fluid Glass morphing capsule (`arming`, compact `396×60`, and adaptive expanded `452×136..190`) on a fixed `520×320` stage in `VoiceOverlay`. Critically damped `Spring` geometry, a 5-layer optical glass shader (Cairo shadow, saturated blurred backdrop, internal voice aura, specular bevel rim, processing perimeter beam), 24-bar harmonic waveform, streaming caret, animated checkmark stroke, Context Pill Chip, and 3D tactile `Keycap` (`Ctrl`, `Ctrl+Win`, `Alt+Win`) all render natively in Cairo/Pango with Obsidian/Pearl tokens. Settings remain centralized in `dx v`'s card-based Textual dashboard; no separate GUI settings window is planned.
 
 Figma Code Connect does not provide a GTK/Python target, so no Code Connect integration is claimed. The documented component map is the handoff until the production UI is implemented.
 

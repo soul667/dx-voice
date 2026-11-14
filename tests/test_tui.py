@@ -74,3 +74,16 @@ class TUITests(unittest.IsolatedAsyncioTestCase):
                 await pilot.pause()
                 self.assertEqual(table.row_count, 2)
                 self.assertEqual(len(history.recent(10)), 2)
+
+    async def test_dashboard_sections_and_preview_hud_button(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            app = VoiceTUI(settings={}, history_path=Path(tmp) / 'history.db', palette={})
+            async with app.run_test(size=(120, 40)) as pilot:
+                preview_btn = app.query_one('#preview-hud', Button)
+                self.assertIsNotNone(preview_btn)
+                count_badge = app.query_one('#history-count')
+                self.assertIsNotNone(count_badge)
+                with patch('dx_voice.tui.socket.socket') as mock_sock:
+                    await pilot.click('#preview-hud')
+                    await pilot.pause()
+                    mock_sock.return_value.__enter__.return_value.sendto.assert_called()

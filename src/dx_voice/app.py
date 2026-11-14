@@ -192,6 +192,11 @@ class HoldGesture:
         self.active = False
         self.suppressed = True
 
+    def needed_threshold(self):
+        if self.mode in ('command', 'tools'):
+            return self.chord_threshold if self.chord_threshold is not None else min(self.threshold, .4)
+        return self.threshold
+
     def update(self, ctrl, other, now, command=False, tools=False):
         if other:
             action = 'cancel' if self.active else None
@@ -212,8 +217,7 @@ class HoldGesture:
             self.since = now
         if self.since is None:
             self.since = now
-        needed = (self.chord_threshold if self.chord_threshold is not None else min(self.threshold, .4)) if self.mode in ('command', 'tools') else self.threshold
-        if now - self.since >= needed:
+        if now - self.since >= self.needed_threshold():
             self.active = True
             return 'start'
         return None
@@ -377,7 +381,8 @@ class App:
         other = (control and alt) or bool(pressed - (self.super_codes | self.ctrl_codes | self.alt_codes)) or self.pointer_watch.activity()
         if ctrl and not other and self.hold.since is None and not self.hold.suppressed:
             self.hold.threshold = hold_threshold(cached_config())
-        action = self.hold.update(ctrl, other, time.monotonic(), command=command, tools=tools)
+        now = time.monotonic()
+        action = self.hold.update(ctrl, other, now, command=command, tools=tools)
         if action == 'start':
             if self.phase == 'idle':
                 print('hotkey_hold=start mode=' + self.hold.mode, flush=True)
@@ -394,6 +399,18 @@ class App:
             self.finish()
         elif action == 'cancel' and self.phase == 'recording':
             self.command('cancel')
+        elif action is None and self.phase == 'idle':
+            if self.hold.since is not None and not self.hold.active and not self.hold.suppressed:
+                elapsed = now - self.hold.since
+                needed = self.hold.needed_threshold()
+                if needed >= 0.55 and elapsed >= 0.26:
+                    self.overlay.show_arming(
+                        min(0.99, elapsed / needed),
+                        mode=self.hold.mode,
+                        theme=cached_config().get('theme', 'light'),
+                    )
+            elif self.overlay.phase == 'arming':
+                self.overlay.dismiss_arming()
         return True
 
     def show_status(self, message):
@@ -414,6 +431,9 @@ class App:
             from .tui import launch
             launch(in_terminal=True)
         elif cmd == 'preview' and self.phase == 'idle':
+            self.overlay.set_theme(cached_config().get('theme', 'light'))
+            self.overlay.set_mode('dictation')
+            self.overlay.set_context_label('')
             self.overlay.show('info', '长按 Ctrl 开始说话', partial='')
         elif cmd == 'toggle':
             if self.phase == 'recording':

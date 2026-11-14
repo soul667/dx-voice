@@ -195,6 +195,15 @@ class Tests(unittest.TestCase):
         self.assertEqual(hold_tools.update(True, False, 0.41, tools=True), 'start')
         self.assertEqual(hold_tools.mode, 'tools')
 
+    def test_needed_threshold_reflects_active_mode(self):
+        hold = voice.HoldGesture(threshold=1.2)
+        hold.update(True, False, 0.0)
+        self.assertEqual(hold.needed_threshold(), 1.2)
+        hold.update(True, False, 0.1, command=True)
+        self.assertEqual(hold.needed_threshold(), 0.4)
+        hold.update(True, False, 0.2, tools=True)
+        self.assertEqual(hold.needed_threshold(), 0.4)
+
     def test_resolve_modifier_codes_includes_mod1_meta_and_mod4_hyper(self):
         from Xlib import X, XK
         rows = [[0] for _ in range(248)]
