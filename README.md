@@ -4,7 +4,7 @@
 
 Streaming voice input for Linux, standalone or as a [Dex](https://github.com/soul667/Dex) plugin. The terminal workspace is assembled from [Textual](https://textual.textualize.io/) widgets and the existing DX theme engine. Models are called through the official OpenAI SDK; local records and workspace indexing use SQLite.
 
-[Editable Figma workspace](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110) · [Product showcase](site/index.html) · [Product/reuse review](docs/product-review.md) · [Component library](design/README.md)
+[Live website](https://soul667.github.io/dx-voice/) · [Editable Figma workspace](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110) · [Product/reuse review](docs/product-review.md) · [Component library](design/README.md)
 
 ![dx v workspace design](design/terminal-workspace.png)
 
