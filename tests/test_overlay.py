@@ -1,4 +1,4 @@
-"""Native rendering/interaction checks for Carbon Fluid Glass HUD."""
+"""Native rendering/interaction checks for DX Voice v0.7 Pure Monolith HUD."""
 import io
 import os
 import unittest
@@ -49,13 +49,13 @@ class OverlayTests(unittest.TestCase):
         self.assertTrue(h.expanded)
         h_one = h.h_spring.value
         self.assertEqual(h.w_spring.value, h.EXPANDED_W)
-        self.assertEqual(h_one, 136.0)
+        self.assertEqual(h_one, 54.0)
 
-        h.partial = '这是一段足够长的中英文混合语音识别内容，用来验证当流式转录文本自动换行到三行时卡片高度能够平滑且自适应地扩展，而不会出现文字截断或按钮重叠问题。'
+        h.partial = '这是一段足够长的中英文混合语音识别内容，用来验证当流式转录文本自动换行到三行时无框胶囊高度能够平滑且自适应地扩展，而不会出现任何文字截断问题。'
         h.settle()
         h_three = h.h_spring.value
         self.assertGreater(h_three, h_one)
-        self.assertEqual(h_three, 190.0)
+        self.assertEqual(h_three, 102.0)
 
         h.show('processing', partial=h.partial)
         h.settle()
@@ -64,7 +64,7 @@ class OverlayTests(unittest.TestCase):
         h.show('success', '✓ 已输入。')
         h.settle()
         self.assertFalse(h.expanded)
-        self.assertEqual(h.h_spring.value, h.COMPACT_H)
+        self.assertEqual(h.h_spring.value, h.DONE_H)
 
         h.show('connecting', partial='')
         h.settle()
@@ -88,10 +88,11 @@ class OverlayTests(unittest.TestCase):
         h = self.overlay
         h.phase = 'recording'
         h.partial = ''
-        for theme, expected in [('light', (255, 255, 255)), ('dark', (15, 20, 30))]:
+        # Sample inside the left margin of the 168x38 WhisperPill (cap_x=176..344, cap_y=248..286).
+        for theme, expected in [('light', (250, 249, 246)), ('dark', (10, 12, 16))]:
             h.set_theme(theme)
             image = self.render()
-            pixel = image.getpixel((320, 278))
+            pixel = image.getpixel((192, 267))
             self.assertEqual(pixel[:3], expected)
             self.assertEqual(pixel[3], 255)
 
@@ -99,8 +100,8 @@ class OverlayTests(unittest.TestCase):
         h = self.overlay
         h.phase = 'recording'
         self.render()
-        self.assertIsNone(h.hit(320, 278))
-        self.assertFalse(h.on_click(None, SimpleNamespace(x=320, y=278, button=1)))
+        self.assertIsNone(h.hit(192, 267))
+        self.assertFalse(h.on_click(None, SimpleNamespace(x=192, y=267, button=1)))
 
         x, y, width, height = h.hitboxes['cancel']
         event = SimpleNamespace(x=x + width / 2, y=y + height / 2, button=1)
@@ -124,7 +125,7 @@ class OverlayTests(unittest.TestCase):
         with patch('dx_voice.modules.screen.region_image', return_value=Image.new('RGB', (520, 320), (0, 100, 200))):
             h._capture_backdrop((0, 0, 520, 320))
         self.assertIsNotNone(h.backdrop)
-        pixel = self.render().getpixel((320, 278))
+        pixel = self.render().getpixel((192, 267))
         self.assertLess(pixel[0], pixel[2])
         self.assertLess(pixel[3], 255)
         h.close()
@@ -150,10 +151,10 @@ class OverlayTests(unittest.TestCase):
                     h.show(
                         state,
                         '连接中断，录音已保留。' if state == 'error' else '✓ 已复制到剪贴板' if state == 'success' else '提示消息',
-                        partial='测试流式文本与 ContextIndex' if state in ('recording', 'processing', 'action') else '',
+                        partial='测试流式文本与极简无框胶囊' if state in ('recording', 'processing', 'action') else '',
                     )
                     image = self.render()
-                    self.assertGreater(image.getbbox()[2], 350)
+                    self.assertIsNotNone(image.getbbox())
 
     def test_rotating_gradient_ring_animates_around_capsule_perimeter(self):
         h = self.overlay
@@ -162,12 +163,11 @@ class OverlayTests(unittest.TestCase):
         h.show('recording', partial='')
         h.ring_angle = 0.0
         img_a = self.render()
-        h.ring_angle = 2.4
+        h.ring_angle = 2.2
         img_b = self.render()
-        # Top capsule border pixel (x=260, y=226) shifts color as the conic gradient orbits.
-        self.assertNotEqual(img_a.getpixel((260, 226)), img_b.getpixel((260, 226)))
-        # Interior capsule surface remains clean.
-        self.assertEqual(img_a.getpixel((320, 278))[:3], (15, 20, 30))
+        # Top capsule rim pixel (x=260, y=248) shifts luminance/color as the chamfered conic light orbits.
+        self.assertNotEqual(img_a.getpixel((260, 248)), img_b.getpixel((260, 248)))
+        self.assertEqual(img_a.getpixel((192, 267))[:3], (10, 12, 16))
 
 
 if __name__ == '__main__':

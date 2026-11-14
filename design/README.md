@@ -1,6 +1,6 @@
 # DX Voice component library
 
-[Open Figma](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=10-2) · [State gallery](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=8-2)
+[Open Figma](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=10-2) · [State gallery](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=8-2) · [v0.7 Pure Monolith HUD](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=58-142)
 
 This is an editable native Figma library, not a set of flattened screenshots. Access follows the file's Figma team permissions. The exported previews below are included in the public source repository.
 
