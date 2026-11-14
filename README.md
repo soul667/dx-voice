@@ -4,7 +4,7 @@
 
 Streaming voice input for Linux, standalone or as a [Dex](https://github.com/soul667/Dex) plugin. The terminal workspace is assembled from [Textual](https://textual.textualize.io/) widgets and the existing DX theme engine. Models are called through the official OpenAI SDK; local records and workspace indexing use SQLite.
 
-[Editable Figma workspace](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110) · [Product/reuse review](docs/product-review.md) · [Component library](design/README.md)
+[Editable Figma workspace](https://www.figma.com/design/dTUUsl2mSeFExFV2VFQa6k?node-id=17-110) · [Product showcase](site/index.html) · [Product/reuse review](docs/product-review.md) · [Component library](design/README.md)
 
 ![dx v workspace design](design/terminal-workspace.png)
 
@@ -103,6 +103,8 @@ dx v retry
 ```bash
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
+
+Preview the interactive product showcase locally with `python3 -m http.server 8765 --bind 127.0.0.1 --directory site`.
 
 Tests use temporary private files, a loopback WebSocket fixture and Textual's headless pilot. They make no paid model calls. Coverage includes key-chord mode selection/release order, mouse precedence, settings masking/save validation, private history, copying commands without execution, model-failure fallback, connection reuse and target-window protection.
 
