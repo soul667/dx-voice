@@ -77,9 +77,14 @@ CONNECTION = [
     ('model', '失败录音重试模型'),
     ('history_enabled', '记录本地输入历史'),
 ]
-ALL_FIELDS = SPEECH + REWRITE + COMMAND + TOOLS + CONNECTION
+LAN_INPUT = [
+    ('lan_input_enabled', '启用局域网流式输入服务'),
+    ('lan_input_port', '局域网服务端口'),
+    ('lan_input_token', '访问 Token（留空自动生成）'),
+]
+ALL_FIELDS = SPEECH + REWRITE + COMMAND + TOOLS + CONNECTION + LAN_INPUT
 FIELD_LABELS = dict(ALL_FIELDS)
-SWITCHES = {'history_enabled', 'rewrite_use_screen', 'tools_enabled', 'context_enabled'}
+SWITCHES = {'history_enabled', 'rewrite_use_screen', 'tools_enabled', 'context_enabled', 'lan_input_enabled'}
 CHOICES = {
     'cleanup_mode': [('关闭 · 原文直出最快', 'none'), ('开启 · 保守重写', 'light')],
     'realtime_delay': [(x, x) for x in ('minimal', 'low', 'medium', 'high', 'xhigh')],
@@ -103,6 +108,7 @@ NUMBERS = {
     'cleanup_timeout_s': (.2, 120),
     'command_timeout_s': (1, 120),
     'tools_timeout_s': (1, 120),
+    'lan_input_port': (1024, 65535),
 }
 
 FIELD_GROUPS = {
@@ -125,6 +131,9 @@ FIELD_GROUPS = {
     'connection': [
         ('公共连接与网络代理', '以 0600 权限保存在本机配置文件，密钥输入框默认掩码隐藏', ('api_key', 'base_url', 'proxy_url')),
         ('文本接口覆盖与持久化', '可独立指定文字模型地址，配置失败录音重试模型及本地历史', ('text_api_key', 'text_base_url', 'model', 'history_enabled')),
+    ],
+    'lan': [
+        ('局域网 Delta 流式输入框', '手机或局域网浏览器打开页面即可实时流式逐字注入（Delta）到电脑当前/指定窗口，也可独立运行 dx v lan serve', ('lan_input_enabled', 'lan_input_port', 'lan_input_token')),
     ],
 }
 
@@ -310,6 +319,16 @@ class VoiceTUI(App):
                             yield Button('调用 DX Tools', id='run-tool', variant='primary')
                             yield Button('复制结果', id='copy-tools', disabled=True)
                         yield TextArea(read_only=True, id='tools-result', show_cursor=False)
+            with TabPane('局域网', id='lan'):
+                with VerticalScroll():
+                    yield from self._compose_grouped_tab('lan')
+                    with Vertical(classes='section-card'):
+                        yield Static('局域网访问链接与状态', classes='section-title')
+                        yield Static('开启上方开关并按 Ctrl+S 保存，或命令行运行 dx v lan serve', classes='section-sub')
+                        yield Static('', id='lan-status', markup=False)
+                        with Horizontal(classes='buttons'):
+                            yield Button('复制访问链接', id='copy-lan-url', variant='primary')
+                            yield Button('保存并应用局域网服务', id='reload-lan')
             with TabPane('历史', id='history'):
                 yield Static(str(self.history.path), classes='note', markup=False)
                 with Horizontal(classes='search-row'):
@@ -349,7 +368,7 @@ class VoiceTUI(App):
                 low, high = NUMBERS[key]
                 if not low <= number <= high:
                     raise ValueError(key + f' 范围是 {low}–{high}')
-                value = str(int(number)) if key in ('hotkey_hold_ms', 'max_seconds') else str(number)
+                value = str(int(number)) if key in ('hotkey_hold_ms', 'max_seconds', 'lan_input_port') else str(number)
             values[key] = value
         return values
 
@@ -357,6 +376,11 @@ class VoiceTUI(App):
         try:
             self.values = self.collect()
             self.save_settings(self.values)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+                    sock.sendto(b'lan-reload', str(voice.SOCKET))
+            except OSError:
+                pass
             self.action_refresh()
             self.notify('已保存，下次输入生效。')
         except (ValueError, OSError):
@@ -389,6 +413,7 @@ class VoiceTUI(App):
                 f"   |   重写模式：{self.values.get('cleanup_mode', 'none')}"
             )
             self._update_context_preview(recent)
+            self._update_lan_status()
             self.rows = {row['id']: row for row in self.history.recent(100)}
             search = self.query_one('#history-search', Input).value
             self._populate_history_table(search)
@@ -408,6 +433,28 @@ class VoiceTUI(App):
                 lines.append(f"• {ws['name']} ({ws['stack']}){branch} → {ws['root']}{summary}")
             preview = '\n'.join(lines)
         self.query_one('#context-preview', Static).update(preview)
+
+    def _lan_urls(self):
+        from .modules.lan_input import DEFAULT_PORT, lan_ips
+        try:
+            port = int(float(self.values.get('lan_input_port', str(DEFAULT_PORT)) or DEFAULT_PORT))
+        except (TypeError, ValueError):
+            port = DEFAULT_PORT
+        token = str(self.values.get('lan_input_token') or '').strip() or '<自动生成>'
+        return port, [f'http://{ip}:{port}/?k={token}' for ip in lan_ips()]
+
+    def _update_lan_status(self):
+        port, urls = self._lan_urls()
+        listening = False
+        try:
+            with socket.create_connection(('127.0.0.1', port), timeout=0.2):
+                listening = True
+        except OSError:
+            pass
+        enabled = str(self.values.get('lan_input_enabled', 'false')).lower() == 'true'
+        state_text = '● 运行中' if listening else ('○ 已启用（待启动）' if enabled else '○ 未启用')
+        lines = [f'状态：{state_text}   |   端口：{port}', *urls[:3]]
+        self.query_one('#lan-status', Static).update('\n'.join(lines))
 
     def _populate_history_table(self, query=''):
         table = self.query_one('#history-table', DataTable)
@@ -501,6 +548,11 @@ class VoiceTUI(App):
             self.context_index.refresh(cfg, snap, force_discovery=True)
             self._update_context_preview()
             self.notify('工作区上下文索引已刷新。')
+        elif name == 'copy-lan-url':
+            _, urls = self._lan_urls()
+            self.copy(urls[0] if urls else '')
+        elif name == 'reload-lan':
+            self.action_save()
         elif name in ('copy-result', 'copy-raw'):
             self.copy((self.selected or {}).get('result' if name == 'copy-result' else 'raw', ''))
         elif name in ('copy-command', 'copy-tools'):

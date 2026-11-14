@@ -5,12 +5,12 @@ from unittest.mock import Mock, patch
 from textual.widgets import Input, Select, TabbedContent, TextArea, Button, DataTable
 from dx_voice import app as voice
 from dx_voice.history import History
-from dx_voice.tui import VoiceTUI, SPEECH, COMMAND, CONNECTION, REWRITE, TOOLS
+from dx_voice.tui import VoiceTUI, SPEECH, COMMAND, CONNECTION, REWRITE, TOOLS, LAN_INPUT
 
 
 class TUITests(unittest.IsolatedAsyncioTestCase):
     async def test_all_settings_edit_in_one_tui_and_key_is_masked(self):
-        self.assertEqual({k for k, _ in SPEECH + COMMAND + CONNECTION + REWRITE + TOOLS}, set(voice.DEFAULT))
+        self.assertEqual({k for k, _ in SPEECH + COMMAND + CONNECTION + REWRITE + TOOLS + LAN_INPUT}, set(voice.DEFAULT))
         with tempfile.TemporaryDirectory() as tmp:
             saved = []
             app = VoiceTUI(settings=dict(voice.DEFAULT, api_key='test-only-secret'), save=saved.append,

@@ -5,4 +5,5 @@ MODULES = {
     'rewrite': {'name': '快速重写', 'optional': True, 'screen_context_opt_in': True},
     'command': {'name': '命令生成', 'executes': False},
     'tools': {'name': 'DX Tools（实验）', 'executes': 'registered DX actions only'},
+    'lan_input': {'name': '局域网流式输入', 'transport': 'http+sse', 'delta_streaming': True},
 }

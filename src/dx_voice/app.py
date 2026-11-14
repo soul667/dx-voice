@@ -30,7 +30,8 @@ DEFAULT = dict(base_url='https://api.openai.com/v1', model='gpt-transcribe',
                rewrite_use_screen='false', rewrite_image_detail='low',
                context_enabled='true', context_roots='',
                tools_enabled='true', tools_model='gpt-5.4-nano', tools_timeout_s=20,
-               history_enabled='true', vocabulary='DX Voice,Codex,Terra,Dot,Moz,Grokbot')
+               history_enabled='true', vocabulary='DX Voice,Codex,Terra,Dot,Moz,Grokbot',
+               lan_input_enabled='false', lan_input_port='8990', lan_input_token='')
 
 _CONFIG_CACHE = {'path': None, 'mtime_ns': -1, 'env': None, 'data': None}
 
@@ -97,7 +98,10 @@ def save_config(data):
                            ('rewrite_use_screen', '截图辅助重写：true / false，开启后发送当前鼠标所在屏幕'),
                            ('rewrite_image_detail', '截图精度：low / high / auto'),
                            ('tools_enabled', '实验 DX Tools 模块：true / false'), ('tools_model', '动作选择模型'),
-                           ('tools_timeout_s', '动作选择超时秒数')]:
+                           ('tools_timeout_s', '动作选择超时秒数'),
+                           ('lan_input_enabled', '局域网流式输入服务：true / false（启用后随守护进程自动监听）'),
+                           ('lan_input_port', '局域网流式输入端口，默认 8990'),
+                           ('lan_input_token', '局域网访问 Token，留空则在启动时自动生成')]:
             value = str(data.get(key, DEFAULT[key])).replace('\n', ' ').replace('\r', ' ')
             out.write(f'# {title}\n{key}={value}\n\n')
     os.replace(name, CONFIG)
@@ -341,6 +345,8 @@ class App:
         self.asr_backend = load_backend(self.asr_name)
         self.realtime = self.asr_backend.create_realtime(lambda kind, token, data: GLib.idle_add(self._network_event, kind, token, data))
         self.realtime.prepare(self.asr_backend.settings(cfg))
+        self.lan_server = None
+        self._sync_lan_server(cfg)
         # Win alone stays available to GNOME.
         try:
             gi.require_version('AyatanaAppIndicator3', '0.1')
@@ -356,6 +362,38 @@ class App:
             self.indicator.set_menu(menu)
         except (ValueError, ImportError):
             pass
+
+    def _sync_lan_server(self, cfg=None):
+        cfg = cfg or config()
+        enabled = str(cfg.get('lan_input_enabled', 'false')).lower() == 'true'
+        try:
+            port = int(float(cfg.get('lan_input_port', '8990') or 8990))
+        except (TypeError, ValueError):
+            port = 8990
+        token = str(cfg.get('lan_input_token') or '').strip()
+        if not enabled:
+            if self.lan_server is not None:
+                self.lan_server.stop()
+                self.lan_server = None
+            return
+        if not token:
+            import secrets
+            token = secrets.token_hex(3)
+            cfg['lan_input_token'] = token
+            save_config(cfg)
+        if self.lan_server is not None and self.lan_server.port == port and self.lan_server.token == token:
+            return
+        if self.lan_server is not None:
+            self.lan_server.stop()
+            self.lan_server = None
+        try:
+            from .modules.lan_input import LanInputServer
+            srv = LanInputServer(port=port, token=token)
+            srv.start(blocking=False)
+            self.lan_server = srv
+            print(f'lan_input=listening port={srv.port}', flush=True)
+        except OSError as exc:
+            print(f'lan_input=error detail={exc}', flush=True)
 
     def _on_x11_io(self, *_):
         self.poll_hotkey()
@@ -443,6 +481,8 @@ class App:
         if cmd in ('settings', 'gui-settings'):
             from .tui import launch
             launch(in_terminal=True)
+        elif cmd == 'lan-reload':
+            self._sync_lan_server(config())
         elif cmd == 'preview' and self.phase == 'idle':
             self.overlay.set_theme(cached_config().get('theme', 'light'))
             self.overlay.set_mode('dictation')
@@ -636,10 +676,14 @@ class App:
                 print(f'first_text_seconds={self.first_delta - self.started:.3f} before_release={self.released_at is None}', flush=True)
             self.overlay.partial = data
             self.overlay.canvas.queue_draw()
+            if self.lan_server is not None and data:
+                self.lan_server.broadcast_event('voice_partial', {'text': data})
         elif kind == 'final':
             text, latency = data
             released = self.released_at or time.monotonic()
             print(f'release_to_final_seconds={time.monotonic() - released:.3f} server_finalize_seconds={latency:.3f}', flush=True)
+            if self.lan_server is not None and text:
+                self.lan_server.broadcast_event('voice_final', {'text': text})
             if text:
                 self.process_text(text)
             else:
@@ -792,6 +836,8 @@ class App:
         try:
             self.Gtk.main()
         finally:
+            if self.lan_server is not None:
+                self.lan_server.stop()
             self.stop_recorder(cancel=True)
             self.realtime.close()
             try:

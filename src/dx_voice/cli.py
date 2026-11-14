@@ -136,8 +136,17 @@ def main(argv=None):
     settings = sub.add_parser('settings')
     settings.add_argument('--file', action='store_true', help='Open the underlying private TXT settings')
     terminal = sub.add_parser('tui')
-    terminal.add_argument('--tab', default='overview', choices=['overview', 'speech', 'rewrite', 'command', 'tools', 'history', 'connection'])
+    terminal.add_argument('--tab', default='overview', choices=['overview', 'speech', 'rewrite', 'command', 'tools', 'lan', 'history', 'connection'])
     sub.add_parser('modules')
+    lan = sub.add_parser('lan', help='LAN streaming delta input box')
+    lan_ops = lan.add_subparsers(dest='lan_operation')
+    lan_serve = lan_ops.add_parser('serve', help='Run LAN delta input server in foreground')
+    lan_serve.add_argument('--host', default='0.0.0.0')
+    lan_serve.add_argument('--port', type=int, default=0)
+    lan_serve.add_argument('--token', default='')
+    lan_serve.add_argument('--dry-run', action='store_true')
+    lan_ops.add_parser('status', help='Check LAN delta input status')
+    lan_ops.add_parser('url', help='Print LAN delta input URLs')
     asr = sub.add_parser('asr')
     asr.add_argument('operation', choices=['providers'], default='providers', nargs='?')
     tools = sub.add_parser('tools')
@@ -183,6 +192,63 @@ def main(argv=None):
             from .modules.asr import providers
             print(json.dumps({'modules': MODULES, 'asr_providers': providers()} if args.action == 'modules'
                              else {'installed': providers(), 'qwen': 'adapter interface available; not installed'}, ensure_ascii=False, indent=2))
+            return 0
+        if args.action == 'lan':
+            import secrets
+            import socket
+            from .modules.lan_input import DEFAULT_PORT, LanInputServer, lan_ips, render_qr_terminal
+            cfg = app.config()
+            try:
+                cfg_port = int(float(cfg.get('lan_input_port', str(DEFAULT_PORT)) or DEFAULT_PORT))
+            except (TypeError, ValueError):
+                cfg_port = DEFAULT_PORT
+            token = str(getattr(args, 'token', '') or cfg.get('lan_input_token') or '').strip()
+            op = args.lan_operation or 'status'
+            if op in ('status', 'url'):
+                if not token:
+                    token = secrets.token_hex(3)
+                    cfg['lan_input_token'] = token
+                    app.save_config(cfg)
+                listening = False
+                try:
+                    with socket.create_connection(('127.0.0.1', cfg_port), timeout=0.6):
+                        listening = True
+                except OSError:
+                    pass
+                urls = [f'http://{ip}:{cfg_port}/?k={token}' for ip in lan_ips()]
+                if op == 'url':
+                    for u in urls:
+                        print(u)
+                    return 0
+                print(json.dumps({
+                    'listening': listening,
+                    'enabled_in_daemon': str(cfg.get('lan_input_enabled', 'false')).lower() == 'true',
+                    'port': cfg_port,
+                    'token': token,
+                    'urls': urls,
+                }, ensure_ascii=False, indent=2))
+                return 0
+            port = args.port or cfg_port
+            if not token:
+                token = secrets.token_hex(3)
+            srv = LanInputServer(host=args.host, port=port, token=token, dry_run=args.dry_run)
+            actual_port = srv.start(blocking=False)
+            urls = srv.urls()
+            print(f'DX Voice 局域网 Delta 流式输入已启动 (port={actual_port}, dry_run={args.dry_run})', flush=True)
+            for u in urls:
+                print(f'  {u}', flush=True)
+            qr = render_qr_terminal(urls[0]) if urls else ''
+            if qr:
+                print(qr, flush=True)
+            print('按 Ctrl+C 停止。', flush=True)
+            try:
+                while True:
+                    import time
+                    time.sleep(1.0)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                srv.stop()
             return 0
         if args.action == 'tools':
             from .modules.tools import CATALOG, run
