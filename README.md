@@ -104,7 +104,7 @@ dx v retry
 PYTHONPATH=src .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Preview the interactive product showcase locally with `python3 -m http.server 8765 --bind 127.0.0.1 --directory site`.
+Preview the interactive React product showcase locally with `cd site && bun install && bun run dev` (or `bun run build && bun run preview` on `127.0.0.1:8765`).
 
 Tests use temporary private files, a loopback WebSocket fixture and Textual's headless pilot. They make no paid model calls. Coverage includes key-chord mode selection/release order, mouse precedence, settings masking/save validation, private history, copying commands without execution, model-failure fallback, connection reuse and target-window protection.
 
